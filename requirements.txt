@@ -1,3 +1,5 @@
+# This is the requirements.txt file for our AI Project, which lists all the necessary Python packages and their specific versions required to run our code without any compatibility issues.
+# Muhammad Umair (23I-0662) AND Abdul Rauf (23I-0591)
 joblib==1.5.3
 numpy==2.4.4
 pandas==3.0.2
