@@ -1,3 +1,8 @@
+# This script preprocesses the raw RACE dataset, which is provided in a nested JSON format, and converts it into flat CSV files for easier use in our models.
+# It reads the 'train', 'dev', and 'test' folders, extracts the relevant information, and saves them as 'train.csv', 'val.csv', and 'test.csv' in the 'data/raw' directory.
+
+# Muhammad Umair (23I-0662) AND Abdul Rauf (23I-0591)
+
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 import joblib
