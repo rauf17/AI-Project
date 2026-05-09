@@ -2,3 +2,4 @@ myenv
 data/
 *.pkl
 data/
+*.bin
