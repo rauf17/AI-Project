@@ -2,6 +2,11 @@
 
 This repository hosts `AI-Project`, a comprehensive initiative exploring fundamental concepts in Artificial Intelligence and Machine Learning through practical model development and data processing.
 
+## Team Members
+- RollNumber1: 23I-0591
+- RollNumber2: 23I-0662
+- Section: C
+
 ## Description 🧠
 
 This project serves as a foundational exploration into the realm of AI, focusing on the implementation and comparison of distinct machine learning models (Model A and Model B). It encompasses the entire machine learning pipeline, from raw data preprocessing to model training and inference. Given the associated documentation (`TF-IDF_Student_Manual.pdf` and `AL2002_LabProject.pdf`), it is strongly suggested that this project primarily targets tasks involving text processing or natural language understanding, likely leveraging techniques like TF-IDF for feature extraction. The modular design allows for independent development and evaluation of different AI approaches.
