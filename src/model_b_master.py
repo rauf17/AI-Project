@@ -1,3 +1,12 @@
+# This is the Master Pipeline for Model B, which includes:
+# 1. Data Preparation (with advanced features)
+# 2. Training Logistic Regression and SVM models
+# 3. Building an Ensemble of the two models
+# 4. Running Unsupervised K-Means Clustering to discover latent groupings
+# 5. Generating hints for the user
+
+# Muhammad Umair (23I-0662) AND Abdul Rauf (23I-0591)
+
 import pandas as pd
 import joblib
 import numpy as np
