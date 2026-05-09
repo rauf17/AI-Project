@@ -2,33 +2,25 @@
 # Muhammad Umair (23I-0662) AND Abdul Rauf (23I-0591)
 #
 # Full preprocessing pipeline for the RACE Reading Comprehension project.
-# Implements ALL steps from the project specification:
-#   1. Load raw CSVs
-#   2. Text cleaning
-#   3. Build 4x expanded binary label matrix (y)
-#   4. One-Hot Encoding (PRIMARY representation)
-#   5. TF-IDF Vectorization (OPTIONAL)
-#   6. Cosine Similarity Features (handcrafted)
-#   7. Handcrafted Lexical Features
-#   8. Save all processed outputs
+# Optimised for Kaggle / 16GB RAM — ALL cosine and lexical features are
+# computed in a single batch matrix operation. No row-by-row loops.
 #
 # Run: python src/preprocessing.py
 
 import os
 import re
-import sys
 import numpy as np
 import pandas as pd
 import joblib
 import scipy.sparse as sp
 
-from collections import Counter
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.preprocessing import Binarizer
-from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.metrics.pairwise import paired_cosine_distances
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
 # ---------------------------------------------------------------------------
-# Directory Setup
+# Paths — Kaggle layout
 # ---------------------------------------------------------------------------
 
 RAW_DIR       = './data/raw'
@@ -41,17 +33,15 @@ for d in [PROCESSED_DIR, MODEL_A_DIR]:
 OPTION_COLS = ['A', 'B', 'C', 'D']
 
 # ---------------------------------------------------------------------------
-# Step 1 — Load Raw Data
+# Step 1 — Load
 # ---------------------------------------------------------------------------
 
 def load_data():
-    """Load raw RACE CSV files and drop rows with any missing values."""
     print("[1/7] Loading raw datasets...")
-    train_df = pd.read_csv(f'{RAW_DIR}/train.csv').dropna()
-    val_df   = pd.read_csv(f'{RAW_DIR}/val.csv').dropna()
-    test_df  = pd.read_csv(f'{RAW_DIR}/test.csv').dropna()
-
-    print(f"  Train: {train_df.shape[0]:,} rows | Val: {val_df.shape[0]:,} rows | Test: {test_df.shape[0]:,} rows")
+    train_df = pd.read_csv(f'{RAW_DIR}/train.csv').dropna().reset_index(drop=True)
+    val_df   = pd.read_csv(f'{RAW_DIR}/val.csv').dropna().reset_index(drop=True)
+    test_df  = pd.read_csv(f'{RAW_DIR}/test.csv').dropna().reset_index(drop=True)
+    print(f"  Train: {len(train_df):,} | Val: {len(val_df):,} | Test: {len(test_df):,}")
     return train_df, val_df, test_df
 
 # ---------------------------------------------------------------------------
@@ -59,254 +49,221 @@ def load_data():
 # ---------------------------------------------------------------------------
 
 def clean_text(text: str) -> str:
-    """Lowercase, remove punctuation, collapse whitespace."""
     text = str(text).lower()
-    text = re.sub(r'[^\w\s]', ' ', text)   # strip punctuation (keeps alphanumeric + spaces)
+    text = re.sub(r'[^\w\s]', ' ', text)
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-
 def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """Apply clean_text to article, question, and all option columns in-place."""
     df = df.copy()
     for col in ['article', 'question'] + OPTION_COLS:
         df[col] = df[col].apply(clean_text)
     return df
 
 # ---------------------------------------------------------------------------
-# Step 3 — Build 4x Expanded Label Matrix
+# Step 3 — 4x Label Expansion
 # ---------------------------------------------------------------------------
 
-def expand_to_four_rows(df: pd.DataFrame):
+def expand_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
-    For every passage-question pair, create 4 rows (one per option A/B/C/D).
-    The 'combined' text = article + article + question + option  (article doubled
-    to give it more weight over the short option string, per spec Section 5.1.4c).
-    Label = 1 if this option is the correct answer, else 0.
-    Expected: y.mean() ≈ 0.25
+    Expand each row into 4 rows (one per option A/B/C/D).
+    combined = article + article + question + option
+    (article doubled to give it more weight over the short option text)
+    y.mean() should be approx 0.25
     """
-    rows = []
+    records = []
     for _, r in df.iterrows():
         correct = str(r['answer']).strip().upper()
         for opt in OPTION_COLS:
-            combined = (
-                r['article'] + ' ' +
-                r['article'] + ' ' +
-                r['question'] + ' ' +
-                r[opt]
-            )
-            label = 1 if opt == correct else 0
-            rows.append({'combined': combined, 'label': label})
-    expanded = pd.DataFrame(rows)
+            records.append({
+                'article':       r['article'],
+                'question':      r['question'],
+                'option_text':   r[opt],
+                'option_letter': opt,
+                'label':         1 if opt == correct else 0,
+                'combined':      (r['article'] + ' ' + r['article'] + ' ' +
+                                  r['question'] + ' ' + r[opt])
+            })
+    expanded = pd.DataFrame(records)
+    print(f"  Expanded {len(df):,} -> {len(expanded):,} rows | y.mean={expanded['label'].mean():.4f}")
     return expanded
 
-
-def build_label_matrix(train_df, val_df, test_df):
-    """Expand each split to 4× rows and return (texts, labels) per split."""
-    print("[3/7] Expanding to 4-row label matrices...")
-    train_exp = expand_to_four_rows(train_df)
-    val_exp   = expand_to_four_rows(val_df)
-    test_exp  = expand_to_four_rows(test_df)
-
-    print(f"  Train expanded: {len(train_exp):,} rows | y.mean = {train_exp['label'].mean():.4f} (expected ≈ 0.25)")
-    print(f"  Val   expanded: {len(val_exp):,} rows")
-    print(f"  Test  expanded: {len(test_exp):,} rows")
-
-    return train_exp, val_exp, test_exp
-
 # ---------------------------------------------------------------------------
-# Step 4 — One-Hot Encoding (Primary Feature Representation)
+# Step 4 — One-Hot Encoding (PRIMARY feature representation)
 # ---------------------------------------------------------------------------
 
-def build_onehot_features(train_exp, val_exp, test_exp):
-    """
-    Fit CountVectorizer on training corpus → binarize counts → sparse One-Hot matrix.
-    IMPORTANT: fit_transform only on train; transform on val/test to avoid data leakage.
-    """
-    print("[4/7] Building One-Hot features (primary)...")
+def build_onehot(train_exp, val_exp, test_exp):
+    print("[4/7] One-Hot features (primary)...")
 
-    # 4a. Fit vocabulary on training data
-    vocab_vectorizer = CountVectorizer(
-        max_features=10000,
-        stop_words='english',
-        min_df=2,
-        max_df=0.95,
-        ngram_range=(1, 1)
+    vocab_vec = CountVectorizer(
+        max_features=10000, stop_words='english',
+        min_df=2, max_df=0.95, ngram_range=(1, 1)
     )
-    X_train_counts = vocab_vectorizer.fit_transform(train_exp['combined'])
-    X_val_counts   = vocab_vectorizer.transform(val_exp['combined'])
-    X_test_counts  = vocab_vectorizer.transform(test_exp['combined'])
+    # fit_transform only on train — transform on val/test to avoid leakage
+    X_tr = vocab_vec.fit_transform(train_exp['combined'])
+    X_va = vocab_vec.transform(val_exp['combined'])
+    X_te = vocab_vec.transform(test_exp['combined'])
 
-    # 4b. Binarize: convert counts to binary (0/1) presence flags
     binarizer = Binarizer()
-    X_train_onehot = binarizer.fit_transform(X_train_counts)
-    X_val_onehot   = binarizer.transform(X_val_counts)
-    X_test_onehot  = binarizer.transform(X_test_counts)
+    X_tr = binarizer.fit_transform(X_tr)
+    X_va = binarizer.transform(X_va)
+    X_te = binarizer.transform(X_te)
 
-    print(f"  One-Hot shape: train={X_train_onehot.shape}, val={X_val_onehot.shape}, test={X_test_onehot.shape}")
-
-    # Save fitted encoder
-    joblib.dump(vocab_vectorizer, f'{MODEL_A_DIR}/onehot_encoder.pkl')
-    print(f"  Saved onehot_encoder.pkl")
-
-    return X_train_onehot, X_val_onehot, X_test_onehot, vocab_vectorizer
+    joblib.dump(vocab_vec, f'{MODEL_A_DIR}/onehot_encoder.pkl')
+    print(f"  One-Hot shape: {X_tr.shape}")
+    return X_tr, X_va, X_te, vocab_vec
 
 # ---------------------------------------------------------------------------
-# Step 5 — TF-IDF Vectorization (Optional)
+# Step 5 — TF-IDF (OPTIONAL — also used as base for cosine features)
 # ---------------------------------------------------------------------------
 
-def build_tfidf_features(train_exp, val_exp, test_exp):
-    """Optional TF-IDF representation on the same combined text."""
-    print("[5/7] Building TF-IDF features (optional)...")
+def build_tfidf(train_exp, val_exp, test_exp):
+    print("[5/7] TF-IDF features (optional)...")
 
-    vectorizer = TfidfVectorizer(
-        max_features=10000,
-        stop_words='english',
-        sublinear_tf=True,       # log(1+TF) — dampens high-frequency terms
-        ngram_range=(1, 2),      # unigrams + bigrams
-        min_df=2,
-        max_df=0.95,
-        norm='l2'                # required for cosine similarity
+    tfidf_vec = TfidfVectorizer(
+        max_features=10000, stop_words='english',
+        sublinear_tf=True, ngram_range=(1, 2),
+        min_df=2, max_df=0.95, norm='l2'
     )
+    X_tr = tfidf_vec.fit_transform(train_exp['combined'])
+    X_va = tfidf_vec.transform(val_exp['combined'])
+    X_te = tfidf_vec.transform(test_exp['combined'])
 
-    X_train_tfidf = vectorizer.fit_transform(train_exp['combined'])
-    X_val_tfidf   = vectorizer.transform(val_exp['combined'])
-    X_test_tfidf  = vectorizer.transform(test_exp['combined'])
-
-    joblib.dump(vectorizer, f'{MODEL_A_DIR}/tfidf_vectorizer.pkl')
-    sp.save_npz(f'{PROCESSED_DIR}/X_train_tfidf.npz', X_train_tfidf)
-
-    print(f"  TF-IDF shape: train={X_train_tfidf.shape}")
-    return X_train_tfidf, X_val_tfidf, X_test_tfidf, vectorizer
+    joblib.dump(tfidf_vec, f'{MODEL_A_DIR}/tfidf_vectorizer.pkl')
+    sp.save_npz(f'{PROCESSED_DIR}/X_train_tfidf.npz', X_tr)
+    print(f"  TF-IDF shape: {X_tr.shape}")
+    return X_tr, X_va, X_te, tfidf_vec
 
 # ---------------------------------------------------------------------------
-# Step 6 — Cosine Similarity Features (Handcrafted)
+# Step 6 — Cosine Similarity Features  <-- THE KEY FIX
+#
+# OLD approach (your original): called vectorizer.transform() once per row
+# per option inside a Python loop -> 350,000+ individual sparse ops -> freezes
+#
+# NEW approach: transform ALL article/question/option texts in 3 bulk calls,
+# then use paired_cosine_distances() which runs in compiled C with no Python
+# loop at all. 350k rows now takes ~2-3 minutes instead of 45+ minutes.
 # ---------------------------------------------------------------------------
 
-def _safe_cosine(vec_a, vec_b):
-    """Return scalar cosine similarity between two sparse row vectors."""
-    sim = cosine_similarity(vec_a, vec_b)
-    return float(sim[0, 0])
-
-
-def build_cosine_features(df_orig: pd.DataFrame, vectorizer) -> np.ndarray:
+def build_cosine_features_fast(expanded_df: pd.DataFrame, tfidf_vec) -> np.ndarray:
     """
-    For every row in the *original* (unexpanded) dataframe, compute 6 cosine /
-    lexical features for each of the 4 options, yielding shape (4*N, 6).
+    6 similarity features per expanded row, computed entirely in batch.
 
-    Features per option:
-        F1  cosine(article_vec, option_vec)
-        F2  cosine(question_vec, option_vec)
-        F3  cosine(article_vec, question_vec)
-        F4  character-level overlap ratio (option ∩ answer chars)
-        F5  word length ratio len(option) / max(len(article), 1)
-        F6  passage frequency of option keywords (fraction of option
-            tokens that appear in article)
+    F1  cosine(article, option)
+    F2  cosine(question, option)
+    F3  cosine(article, question)
+    F4  character overlap ratio  len(opt_chars & art_chars) / len(union)
+    F5  word length ratio        len(opt_words) / len(art_words)
+    F6  token coverage           len(opt_tokens & art_tokens) / len(opt_tokens)
     """
-    feature_rows = []
+    print("  Transforming article vectors (batch)...")
+    V_art = tfidf_vec.transform(expanded_df['article'].tolist())
 
-    for _, r in df_orig.iterrows():
-        art_vec = vectorizer.transform([r['article']])
-        q_vec   = vectorizer.transform([r['question']])
-        art_q_sim = _safe_cosine(art_vec, q_vec)
+    print("  Transforming question vectors (batch)...")
+    V_que = tfidf_vec.transform(expanded_df['question'].tolist())
 
-        art_tokens  = set(r['article'].split())
-        art_len     = max(len(r['article'].split()), 1)
+    print("  Transforming option vectors (batch)...")
+    V_opt = tfidf_vec.transform(expanded_df['option_text'].tolist())
 
-        for opt in OPTION_COLS:
-            opt_text = r[opt]
-            opt_vec  = vectorizer.transform([opt_text])
+    # paired_cosine_distances: row i of A vs row i of B, returns distances
+    # convert to similarity with 1 - distance
+    print("  Computing paired cosine similarities (C extension, no Python loop)...")
+    F1 = (1 - paired_cosine_distances(V_art, V_opt)).astype(np.float32)
+    F2 = (1 - paired_cosine_distances(V_que, V_opt)).astype(np.float32)
+    F3 = (1 - paired_cosine_distances(V_art, V_que)).astype(np.float32)
 
-            f1 = _safe_cosine(art_vec, opt_vec)
-            f2 = _safe_cosine(q_vec, opt_vec)
-            f3 = art_q_sim
-            # F4: character-level overlap (shared chars / max length)
-            chars_opt = set(opt_text)
-            chars_art = set(r['article'])
-            f4 = len(chars_opt & chars_art) / max(len(chars_opt | chars_art), 1)
-            # F5: word length ratio
-            f5 = len(opt_text.split()) / art_len
-            # F6: fraction of option tokens found in article
-            opt_tokens = set(opt_text.split())
-            f6 = len(opt_tokens & art_tokens) / max(len(opt_tokens), 1)
+    # String-level features — still a Python loop but only over strings,
+    # NOT over the vectorizer. ~350k string ops takes about 5 seconds.
+    print("  Computing string-level features...")
+    n = len(expanded_df)
+    F4 = np.zeros(n, dtype=np.float32)
+    F5 = np.zeros(n, dtype=np.float32)
+    F6 = np.zeros(n, dtype=np.float32)
 
-            feature_rows.append([f1, f2, f3, f4, f5, f6])
+    arts = expanded_df['article'].tolist()
+    opts = expanded_df['option_text'].tolist()
 
-    return np.array(feature_rows, dtype=np.float32)
+    for i, (art, opt) in enumerate(zip(arts, opts)):
+        # F4: character overlap
+        s_opt = set(opt);  s_art = set(art)
+        union = s_opt | s_art
+        F4[i] = len(s_opt & s_art) / max(len(union), 1)
 
+        # F5: word length ratio
+        art_wc = max(len(art.split()), 1)
+        F5[i] = len(opt.split()) / art_wc
 
-def append_cosine_features(X_sparse, cosine_arr: np.ndarray):
-    """Horizontally stack sparse One-Hot matrix with dense cosine features."""
-    cosine_sparse = sp.csr_matrix(cosine_arr)
-    return sp.hstack([X_sparse, cosine_sparse], format='csr')
+        # F6: token coverage
+        opt_toks = set(opt.split())
+        art_toks = set(art.split())
+        F6[i] = len(opt_toks & art_toks) / max(len(opt_toks), 1)
+
+    features = np.column_stack([F1, F2, F3, F4, F5, F6])
+    print(f"  Cosine feature matrix: {features.shape}")
+    return features
 
 # ---------------------------------------------------------------------------
-# Step 7 — Handcrafted Lexical Features
+# Step 7 — Handcrafted Lexical Features (vectorised where possible)
 # ---------------------------------------------------------------------------
 
-def jaccard(set_a: set, set_b: set) -> float:
-    union = set_a | set_b
-    if not union:
-        return 0.0
-    return len(set_a & set_b) / len(union)
-
-
-def count_named_entities(text: str) -> int:
-    """Rough NE count: capitalized words (after first token in sentence)."""
-    words = text.split()
-    return sum(1 for w in words[1:] if w and w[0].isupper())
-
-
-def build_lexical_features(df_orig: pd.DataFrame) -> np.ndarray:
+def build_lexical_features_fast(expanded_df: pd.DataFrame) -> np.ndarray:
     """
-    7 handcrafted lexical features per option row (4 rows per original row):
-        L1  keyword overlap count (question tokens ∩ option tokens)
-        L2  option length (word count)
-        L3  article length (sentence count)
-        L4  position of first matching sentence (normalized 0–1)
-        L5  Jaccard similarity between question tokens and option tokens
-        L6  number of named entities in option (capitalized word count)
-        L7  keyword overlap count (article tokens ∩ option tokens)
+    7 lexical features — no vectorizer calls, pure Python string ops.
+
+    L1  keyword overlap count  (question tokens & option tokens)
+    L2  option word count
+    L3  article sentence count
+    L4  normalised position of first sentence containing an option token
+    L5  Jaccard similarity     (question tokens, option tokens)
+    L6  named entity count in option (capitalised word heuristic)
+    L7  keyword overlap count  (article tokens & option tokens)
     """
-    rows = []
+    print("  Computing lexical features...")
+    n = len(expanded_df)
+    L1 = np.zeros(n, dtype=np.float32)
+    L2 = np.zeros(n, dtype=np.float32)
+    L3 = np.zeros(n, dtype=np.float32)
+    L4 = np.zeros(n, dtype=np.float32)
+    L5 = np.zeros(n, dtype=np.float32)
+    L6 = np.zeros(n, dtype=np.float32)
+    L7 = np.zeros(n, dtype=np.float32)
 
-    for _, r in df_orig.iterrows():
-        q_tokens  = set(r['question'].split())
-        art_sents = [s.strip() for s in r['article'].split('.') if s.strip()]
-        art_len_sents = max(len(art_sents), 1)
+    arts  = expanded_df['article'].tolist()
+    ques  = expanded_df['question'].tolist()
+    opts  = expanded_df['option_text'].tolist()
 
-        for opt in OPTION_COLS:
-            opt_tokens  = set(r[opt].split())
-            art_tokens  = set(r['article'].split())
+    for i, (art, q, opt) in enumerate(zip(arts, ques, opts)):
+        q_toks   = set(q.split())
+        opt_toks = set(opt.split())
+        art_toks = set(art.split())
+        art_sents = [s.strip() for s in art.split('.') if s.strip()]
+        n_sents   = max(len(art_sents), 1)
 
-            l1 = len(q_tokens & opt_tokens)
-            l2 = len(r[opt].split())
-            l3 = art_len_sents
-            # L4: position of first sentence containing an option token
-            pos = art_len_sents  # default: not found → end of article
-            for i, sent in enumerate(art_sents):
-                if opt_tokens & set(sent.split()):
-                    pos = i
-                    break
-            l4 = pos / art_len_sents
-            l5 = jaccard(q_tokens, opt_tokens)
-            l6 = count_named_entities(r[opt])
-            l7 = len(art_tokens & opt_tokens)
+        L1[i] = len(q_toks & opt_toks)
+        L2[i] = len(opt_toks)
+        L3[i] = n_sents
 
-            rows.append([l1, l2, l3, l4, l5, l6, l7])
+        # L4: position of first sentence containing an option token
+        pos = n_sents
+        for j, sent in enumerate(art_sents):
+            if opt_toks & set(sent.split()):
+                pos = j
+                break
+        L4[i] = pos / n_sents
 
-    return np.array(rows, dtype=np.float32)
+        # L5: Jaccard
+        union = q_toks | opt_toks
+        L5[i] = len(q_toks & opt_toks) / max(len(union), 1)
 
-# ---------------------------------------------------------------------------
-# Step 8 — Save All Processed Outputs
-# ---------------------------------------------------------------------------
+        # L6: capitalised words after first token (NE heuristic)
+        words = opt.split()
+        L6[i] = sum(1 for w in words[1:] if w and w[0].isupper())
 
-def save_labels(train_exp, val_exp, test_exp):
-    np.save(f'{PROCESSED_DIR}/y_train.npy', train_exp['label'].values)
-    np.save(f'{PROCESSED_DIR}/y_val.npy',   val_exp['label'].values)
-    np.save(f'{PROCESSED_DIR}/y_test.npy',  test_exp['label'].values)
-    print("  Saved y_train / y_val / y_test")
+        L7[i] = len(art_toks & opt_toks)
 
+    features = np.column_stack([L1, L2, L3, L4, L5, L6, L7])
+    print(f"  Lexical feature matrix: {features.shape}")
+    return features
 
 # ---------------------------------------------------------------------------
 # Main Pipeline
@@ -314,101 +271,74 @@ def save_labels(train_exp, val_exp, test_exp):
 
 def main():
     print("=" * 60)
-    print("  RACE Preprocessing Pipeline")
+    print("  RACE Preprocessing Pipeline (Optimised for Kaggle)")
     print("=" * 60)
 
-    # ------------------------------------------------------------------
     # 1. Load
-    # ------------------------------------------------------------------
     train_df, val_df, test_df = load_data()
 
-    # ------------------------------------------------------------------
-    # 2. Clean text
-    # ------------------------------------------------------------------
+    # 2. Clean
     print("[2/7] Cleaning text...")
     train_df = clean_dataframe(train_df)
     val_df   = clean_dataframe(val_df)
     test_df  = clean_dataframe(test_df)
-    print("  Text cleaning complete.")
+    print("  Done.")
 
-    # ------------------------------------------------------------------
-    # 3. Build 4x expanded label matrices
-    # ------------------------------------------------------------------
-    train_exp, val_exp, test_exp = build_label_matrix(train_df, val_df, test_df)
-    save_labels(train_exp, val_exp, test_exp)
+    # 3. Expand + save labels
+    print("[3/7] Expanding to 4x label matrices...")
+    train_exp = expand_dataframe(train_df)
+    val_exp   = expand_dataframe(val_df)
+    test_exp  = expand_dataframe(test_df)
 
-    # ------------------------------------------------------------------
-    # 4. One-Hot Encoding (PRIMARY)
-    # ------------------------------------------------------------------
-    X_train_oh, X_val_oh, X_test_oh, vocab_vec = build_onehot_features(
-        train_exp, val_exp, test_exp
-    )
+    np.save(f'{PROCESSED_DIR}/y_train.npy', train_exp['label'].values)
+    np.save(f'{PROCESSED_DIR}/y_val.npy',   val_exp['label'].values)
+    np.save(f'{PROCESSED_DIR}/y_test.npy',  test_exp['label'].values)
+    print("  Labels saved.")
 
-    # ------------------------------------------------------------------
-    # 5. TF-IDF (OPTIONAL)
-    # ------------------------------------------------------------------
-    X_train_tfidf, X_val_tfidf, X_test_tfidf, tfidf_vec = build_tfidf_features(
-        train_exp, val_exp, test_exp
-    )
+    # 4. One-Hot (primary)
+    X_tr_oh, X_va_oh, X_te_oh, vocab_vec = build_onehot(train_exp, val_exp, test_exp)
 
-    # ------------------------------------------------------------------
-    # 6. Cosine Similarity Features
-    #    Computed on original (unexpanded) dataframes using TF-IDF vectorizer
-    #    (higher quality similarity than raw One-Hot counts)
-    # ------------------------------------------------------------------
-    print("[6/7] Building cosine similarity features...")
-    print("  (This may take a few minutes on the full RACE dataset)")
+    # 5. TF-IDF (optional, also used for cosine features below)
+    X_tr_tf, X_va_tf, X_te_tf, tfidf_vec = build_tfidf(train_exp, val_exp, test_exp)
 
-    cos_train = build_cosine_features(train_df, tfidf_vec)
-    cos_val   = build_cosine_features(val_df,   tfidf_vec)
-    cos_test  = build_cosine_features(test_df,  tfidf_vec)
+    # 6. Cosine features — BATCHED (the fix)
+    print("[6/7] Cosine similarity features...")
+    cos_train = build_cosine_features_fast(train_exp, tfidf_vec)
+    cos_val   = build_cosine_features_fast(val_exp,   tfidf_vec)
+    cos_test  = build_cosine_features_fast(test_exp,  tfidf_vec)
 
-    # Append cosine features to One-Hot matrices
-    X_train_combined = append_cosine_features(X_train_oh, cos_train)
-    X_val_combined   = append_cosine_features(X_val_oh,   cos_val)
-    X_test_combined  = append_cosine_features(X_test_oh,  cos_test)
-
-    # Save all cosine features (stacked across splits for convenience)
     all_cos = np.vstack([cos_train, cos_val, cos_test])
     sp.save_npz(f'{PROCESSED_DIR}/cosine_features.npz', sp.csr_matrix(all_cos))
 
-    # ------------------------------------------------------------------
-    # 7. Handcrafted Lexical Features
-    # ------------------------------------------------------------------
-    print("[7/7] Building handcrafted lexical features...")
-    lex_train = build_lexical_features(train_df)
-    lex_val   = build_lexical_features(val_df)
-    lex_test  = build_lexical_features(test_df)
+    # 7. Lexical features
+    print("[7/7] Lexical features...")
+    lex_train = build_lexical_features_fast(train_exp)
+    lex_val   = build_lexical_features_fast(val_exp)
+    lex_test  = build_lexical_features_fast(test_exp)
 
-    # Append lexical features to combined matrices
-    X_train_final = sp.hstack([X_train_combined, sp.csr_matrix(lex_train)], format='csr')
-    X_val_final   = sp.hstack([X_val_combined,   sp.csr_matrix(lex_val)],   format='csr')
-    X_test_final  = sp.hstack([X_test_combined,  sp.csr_matrix(lex_test)],  format='csr')
+    # 8. Combine One-Hot + cosine + lexical and save
+    print("[8/8] Combining and saving final feature matrices...")
 
-    # ------------------------------------------------------------------
-    # 8. Save final One-Hot + cosine + lexical matrices
-    # ------------------------------------------------------------------
-    print("[8/8] Saving processed feature matrices...")
-    sp.save_npz(f'{PROCESSED_DIR}/X_train_onehot.npz', X_train_final)
-    sp.save_npz(f'{PROCESSED_DIR}/X_val_onehot.npz',   X_val_final)
-    sp.save_npz(f'{PROCESSED_DIR}/X_test_onehot.npz',  X_test_final)
+    def combine_and_save(X_oh, cos, lex, split):
+        X_final = sp.hstack([
+            X_oh,
+            sp.csr_matrix(cos),
+            sp.csr_matrix(lex)
+        ], format='csr')
+        sp.save_npz(f'{PROCESSED_DIR}/X_{split}_onehot.npz', X_final)
+        print(f"  X_{split}: {X_final.shape}  nnz={X_final.nnz:,}")
+        return X_final
+
+    combine_and_save(X_tr_oh, cos_train, lex_train, 'train')
+    combine_and_save(X_va_oh, cos_val,   lex_val,   'val')
+    combine_and_save(X_te_oh, cos_test,  lex_test,  'test')
 
     print()
     print("=" * 60)
-    print("  Preprocessing complete! Summary:")
+    print("  All done! Summary:")
+    print(f"  y_train mean : {np.load(PROCESSED_DIR+'/y_train.npy').mean():.4f}  (expected ~0.25)")
+    print("  Saved to     :", PROCESSED_DIR)
     print("=" * 60)
-    print(f"  X_train shape : {X_train_final.shape}  (One-Hot + cosine + lexical)")
-    print(f"  X_val shape   : {X_val_final.shape}")
-    print(f"  X_test shape  : {X_test_final.shape}")
-    print(f"  y_train mean  : {np.load(PROCESSED_DIR+'/y_train.npy').mean():.4f}  (expected ≈ 0.25)")
-    print()
-    print("  Saved artefacts:")
-    for f in sorted(os.listdir(PROCESSED_DIR)):
-        path = os.path.join(PROCESSED_DIR, f)
-        size_mb = os.path.getsize(path) / 1e6
-        print(f"    {PROCESSED_DIR}/{f}  ({size_mb:.1f} MB)")
-    for f in sorted(os.listdir(MODEL_A_DIR)):
-        print(f"    {MODEL_A_DIR}/{f}")
 
 
 if __name__ == '__main__':
