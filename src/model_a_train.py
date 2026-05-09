@@ -1,3 +1,7 @@
+# This script trains Model A, which is a Logistic Regression-based Answer Verifier.
+# It includes data preparation, feature engineering, and model training.
+# Muhammad Umair (23I-0662) AND Abdul Rauf (23I-0591)
+
 import pandas as pd
 import joblib
 from sklearn.linear_model import LogisticRegression
