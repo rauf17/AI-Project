@@ -23,7 +23,6 @@ jsonschema-specifications==2025.9.1
 MarkupSafe==3.0.3
 narwhals==2.21.0
 numpy==2.4.4
-nvidia-nccl-cu12==2.30.4
 packaging==26.2
 pandas==3.0.2
 pillow==12.2.0
