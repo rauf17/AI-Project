@@ -1,0 +1,303 @@
+
+============================================================
+  MODEL A EVALUATION  —  split=VAL
+============================================================
+  Loaded 4,886 rows → 19,544 option rows  (y.mean=0.2500)
+  Building features...
+
+========================================================
+  Logistic Regression
+========================================================
+  Accuracy        : 0.5858
+  Macro F1        : 0.5039   ← primary metric
+  Macro Precision : 0.5084
+  Macro Recall    : 0.5102
+  Exact Match     : 0.2329   ← fraction of questions answered correctly
+
+  Per-Class Breakdown:
+  Class     Precision     Recall         F1    Support
+  0            0.7558     0.6613     0.7054      14658
+  1            0.2611     0.3590     0.3023       4886
+
+  Confusion Matrix (rows=actual, cols=predicted):
+              Pred 0   Pred 1
+  Actual 0      9694     4964   (TN / FP)
+  Actual 1      3132     1754   (FN / TP)
+
+  Prediction distribution: {0: 12826, 1: 6718}
+
+  Health Check:
+  [OK]   Macro F1 = 0.5039  → model is learning but not great
+  [WEAK] Exact Match = 0.2329  → below random baseline (0.25)
+
+========================================================
+  SVM (LinearSVC)
+========================================================
+  Accuracy        : 0.3991
+  Macro F1        : 0.3967   ← primary metric
+  Macro Precision : 0.4911
+  Macro Recall    : 0.4898
+  Exact Match     : 0.2192   ← fraction of questions answered correctly
+
+  Per-Class Breakdown:
+  Class     Precision     Recall         F1    Support
+  0            0.7378     0.3084     0.4350      14658
+  1            0.2444     0.6711     0.3583       4886
+
+  Confusion Matrix (rows=actual, cols=predicted):
+              Pred 0   Pred 1
+  Actual 0      4521    10137   (TN / FP)
+  Actual 1      1607     3279   (FN / TP)
+
+  Prediction distribution: {1: 13416, 0: 6128}
+
+  Health Check:
+  [WEAK] Macro F1 = 0.3967  → model is barely above random (0.50 is random baseline)
+  [WEAK] Exact Match = 0.2192  → below random baseline (0.25)
+
+========================================================
+  Naive Bayes
+========================================================
+  Accuracy        : 0.6133
+  Macro F1        : 0.5003   ← primary metric
+  Macro Precision : 0.5007
+  Macro Recall    : 0.5007
+  Exact Match     : 0.2206   ← fraction of questions answered correctly
+
+  Per-Class Breakdown:
+  Class     Precision     Recall         F1    Support
+  0            0.7504     0.7260     0.7380      14658
+  1            0.2510     0.2755     0.2627       4886
+
+  Confusion Matrix (rows=actual, cols=predicted):
+              Pred 0   Pred 1
+  Actual 0     10641     4017   (TN / FP)
+  Actual 1      3540     1346   (FN / TP)
+
+  Prediction distribution: {0: 14181, 1: 5363}
+
+  Health Check:
+  [OK]   Macro F1 = 0.5003  → model is learning but not great
+  [WEAK] Exact Match = 0.2206  → below random baseline (0.25)
+
+========================================================
+  Random Forest
+========================================================
+  Accuracy        : 0.7499
+  Macro F1        : 0.4290   ← primary metric
+  Macro Precision : 0.5750
+  Macro Recall    : 0.5001
+  Exact Match     : 0.2186   ← fraction of questions answered correctly
+
+  Per-Class Breakdown:
+  Class     Precision     Recall         F1    Support
+  0            0.7500     0.9998     0.8571      14658
+  1            0.4000     0.0004     0.0008       4886
+
+  Confusion Matrix (rows=actual, cols=predicted):
+              Pred 0   Pred 1
+  Actual 0     14655        3   (TN / FP)
+  Actual 1      4884        2   (FN / TP)
+
+  Prediction distribution: {0: 19539, 1: 5}
+
+  Health Check:
+  [FAIL] F1 for class 1 = 0.0008  → model is NOT learning correct answers
+  [WEAK] Exact Match = 0.2186  → below random baseline (0.25)
+
+========================================================
+  XGBoost
+========================================================
+  Accuracy        : 0.2770
+  Macro F1        : 0.2495   ← primary metric
+  Macro Precision : 0.4898
+  Macro Recall    : 0.4970
+  Exact Match     : 0.2186   ← fraction of questions answered correctly
+
+  Per-Class Breakdown:
+  Class     Precision     Recall         F1    Support
+  0            0.7308     0.0570     0.1058      14658
+  1            0.2488     0.9370     0.3932       4886
+
+  Confusion Matrix (rows=actual, cols=predicted):
+              Pred 0   Pred 1
+  Actual 0       836    13822   (TN / FP)
+  Actual 1       308     4578   (FN / TP)
+
+  Prediction distribution: {1: 18400, 0: 1144}
+
+  Health Check:
+  [WEAK] Macro F1 = 0.2495  → model is barely above random (0.50 is random baseline)
+  [WEAK] Exact Match = 0.2186  → below random baseline (0.25)
+
+========================================================
+  Ensemble — Soft Voting
+========================================================
+  Accuracy        : 0.5812
+  Macro F1        : 0.5019   ← primary metric
+  Macro Precision : 0.5074
+  Macro Recall    : 0.5090
+  Exact Match     : 0.2313   ← fraction of questions answered correctly
+
+  Per-Class Breakdown:
+  Class     Precision     Recall         F1    Support
+  0            0.7552     0.6534     0.7006      14658
+  1            0.2596     0.3645     0.3032       4886
+
+  Confusion Matrix (rows=actual, cols=predicted):
+              Pred 0   Pred 1
+  Actual 0      9578     5080   (TN / FP)
+  Actual 1      3105     1781   (FN / TP)
+
+  Prediction distribution: {0: 12683, 1: 6861}
+
+  Health Check:
+  [OK]   Macro F1 = 0.5019  → model is learning but not great
+  [WEAK] Exact Match = 0.2313  → below random baseline (0.25)
+
+========================================================
+  Ensemble — Hard Voting
+========================================================
+  Accuracy        : 0.7244
+  Macro F1        : 0.4636   ← primary metric
+  Macro Precision : 0.5037
+  Macro Recall    : 0.5010
+  Exact Match     : 0.2239   ← fraction of questions answered correctly
+
+  Per-Class Breakdown:
+  Class     Precision     Recall         F1    Support
+  0            0.7504     0.9477     0.8376      14658
+  1            0.2570     0.0542     0.0896       4886
+
+  Confusion Matrix (rows=actual, cols=predicted):
+              Pred 0   Pred 1
+  Actual 0     13892      766   (TN / FP)
+  Actual 1      4621      265   (FN / TP)
+
+  Prediction distribution: {0: 18513, 1: 1031}
+
+  Health Check:
+  [FAIL] F1 for class 1 = 0.0896  → model is NOT learning correct answers
+  [WEAK] Exact Match = 0.2239  → below random baseline (0.25)
+
+========================================================
+  Ensemble — Stacking
+========================================================
+  Accuracy        : 0.5116
+  Macro F1        : 0.4742   ← primary metric
+  Macro Precision : 0.5032
+  Macro Recall    : 0.5043
+  Exact Match     : 0.2268   ← fraction of questions answered correctly
+
+  Per-Class Breakdown:
+  Class     Precision     Recall         F1    Support
+  0            0.7531     0.5190     0.6145      14658
+  1            0.2533     0.4896     0.3339       4886
+
+  Confusion Matrix (rows=actual, cols=predicted):
+              Pred 0   Pred 1
+  Actual 0      7607     7051   (TN / FP)
+  Actual 1      2494     2392   (FN / TP)
+
+  Prediction distribution: {0: 10101, 1: 9443}
+
+  Health Check:
+  [OK]   Macro F1 = 0.4742  → model is learning but not great
+  [WEAK] Exact Match = 0.2268  → below random baseline (0.25)
+
+========================================================
+  UNSUPERVISED EVALUATION (spec Section 10.3)
+========================================================
+  [WARN] All points assigned to 1 cluster — silhouette undefined (nan)
+  K-Means Silhouette Score : nan  (higher=better, >0.3 is decent)
+  K-Means Purity           : 0.7500  (higher=better, 1.0=perfect)
+  Cluster distribution     : Counter({0: 5000})
+  GMM: model found (BIC was reported during training)
+
+================================================================================
+  FINAL MODEL COMPARISON TABLE
+  Sorted by Macro F1 — this is the primary metric
+================================================================================
+                 model  accuracy  macro_f1  f1_class0  f1_class1  exact_match
+   Logistic Regression  0.585755  0.503869   0.705429   0.302310     0.232910
+Ensemble — Soft Voting  0.581201  0.501930   0.700633   0.303226     0.231273
+           Naive Bayes  0.613334  0.500309   0.737959   0.262660     0.220630
+   Ensemble — Stacking  0.511615  0.474176   0.614484   0.333868     0.226770
+Ensemble — Hard Voting  0.724366  0.463586   0.837599   0.089572     0.223905
+         Random Forest  0.749949  0.428955   0.857093   0.000818     0.218584
+       SVM (LinearSVC)  0.399099  0.396663   0.435004   0.358321     0.219198
+               XGBoost  0.277016  0.249504   0.105809   0.393198     0.218584
+
+  Best model: Logistic Regression
+  Macro F1 = 0.5039  |  Exact Match = 0.2329
+
+  Random baseline (4-class): Accuracy=0.25, ExactMatch=0.25
+  Random baseline (binary):  Macro F1≈0.50 (always predicts majority)
+
+  How to read these results:
+  - Macro F1 > 0.55  = model is meaningfully better than random
+  - Exact Match > 0.30 = correctly answering >30% of questions
+  - F1_class1 > 0.35 = model is actually identifying correct answers
+
+============================================================
+  MODEL B EVALUATION  —  split=VAL
+============================================================
+  Loaded 4,886 rows
+
+========================================================
+  DISTRACTOR RANKER EVALUATION  (spec Section 7.8)
+========================================================
+
+  Accuracy     : 1.0000
+  Macro F1     : 1.0000   ← primary metric
+  Precision    : 1.0000
+  Recall       : 1.0000
+  Precision@3  : 1.0000   (top-3 ranked are valid distractors)
+  P@1          : 1.0000
+  P@3          : 1.0000
+  P@5          : 1.0000
+
+  Per-Class Breakdown:
+  Class     Precision     Recall         F1    Support
+  0            1.0000     1.0000     1.0000        500
+  1            1.0000     1.0000     1.0000       1500
+
+  Confusion Matrix (rows=actual, cols=predicted):
+              Pred 0   Pred 1
+  Actual 0       500        0   (TN / FP)
+  Actual 1         0     1500   (FN / TP)
+
+  Health Check:
+  [GOOD] Macro F1=1.0000  → ranker is working well
+
+========================================================
+  HINT SCORER EVALUATION  (spec Section 7.6)
+========================================================
+  [WARN] No hint sentences extracted from this split
+
+========================================================
+  WORD2VEC EVALUATION  (spec Section 7.5)
+========================================================
+  Vocabulary size : 73,633
+  Vector size     : 100
+
+  Nearest-neighbour sanity check (top-3):
+    student      → students(0.68), teacher(0.61), graduate(0.61)
+    school       → schools(0.67), class(0.67), kindergarten(0.63)
+    read         → reading(0.76), write(0.72), written(0.65)
+    answer       → answers(0.79), question(0.64), answered(0.63)
+    question     → questions(0.79), answer(0.64), yes(0.53)
+
+  Answer-token vocab coverage : 0.9987  (763/764)
+  [GOOD] ≥80% of answer tokens are in Word2Vec vocab
+
+============================================================
+  MODEL B SUMMARY
+============================================================
+  Component                 Status
+  --------------------------------------------------
+  Distractor Ranker         loaded
+  Hint Scorer               loaded
+  Word2Vec                  loaded
+
+  Evaluation complete.
