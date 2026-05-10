@@ -94,6 +94,11 @@ class InferencePipeline:
         self.xgb_classifier     = None
         self.ensemble_model     = None   # best ensemble available
 
+        # ── NEW: number of extra hand-crafted features appended at training.
+        # Loaded from a small metadata file saved alongside the model.
+        # Falls back to auto-detection so old checkpoints still work.
+        self._n_extra_features: Optional[int] = None
+
         # Model B artefacts
         self.distractor_ranker  = None
         self.hint_scorer        = None
@@ -144,6 +149,36 @@ class InferencePipeline:
             or self.rf_classifier
         )
 
+        # ── Load feature metadata so we know how many extra cols were appended
+        #    at training time.  Save this file from your training script with:
+        #      joblib.dump({"n_extra": N}, f"{_MODEL_A}/feature_meta.pkl")
+        meta = self._try_load(f"{_MODEL_A}/feature_meta.pkl")
+        if meta and "n_extra" in meta:
+            self._n_extra_features = int(meta["n_extra"])
+
+        # If metadata absent, infer from the saved model's expected feature count
+        # vs the vectorizer's output dimension.
+        if self._n_extra_features is None and self.primary_verifier is not None and self.vectorizer is not None:
+            try:
+                n_model  = self.primary_verifier.n_features_in_
+                n_tfidf  = self.vectorizer.transform([""]).shape[1]
+                n_extra  = n_model - n_tfidf
+                if 0 <= n_extra <= 20:          # sanity check
+                    self._n_extra_features = n_extra
+                    print(f"[inference] Auto-detected n_extra_features = {n_extra}")
+                else:
+                    # Cannot reconcile — fall back to plain TF-IDF only (0 extras)
+                    self._n_extra_features = 0
+                    print(f"[inference] Warning: unexpected feature delta {n_extra}; "
+                          f"using 0 extra features. Consider retraining.")
+            except Exception as exc:
+                self._n_extra_features = 0
+                print(f"[inference] Could not auto-detect extra features: {exc}")
+
+        # Default safe value
+        if self._n_extra_features is None:
+            self._n_extra_features = 0
+
         # Model B
         self.distractor_ranker = self._try_load(f"{_MODEL_B}/distractor_ranker.pkl")
         self.hint_scorer       = self._try_load(f"{_MODEL_B}/hint_scorer.pkl")
@@ -184,13 +219,23 @@ class InferencePipeline:
     def _make_verification_features(self, article: str, question: str,
                                     option: str) -> sp.csr_matrix:
         """
-        Build the same combined feature vector used during Model A training:
-          article + article + question + option  (article weighted 2×)
+        Build the same combined feature vector used during Model A training.
+
+        The number of hand-crafted extra columns appended after the TF-IDF
+        vector is determined by self._n_extra_features (auto-detected from
+        the saved model at load time), so this always matches what the
+        classifier was trained on — regardless of how many extras were used.
         """
         combined = f"{article} {article} {question} {option}"
         X = self.vectorizer.transform([_clean(combined)])
 
-        # Append cosine similarity features as extra columns
+        n_extra = self._n_extra_features
+
+        if n_extra == 0:
+            # Model was trained on raw TF-IDF only — return as-is
+            return X
+
+        # Pre-compute vectors needed for extra features
         art_vec  = self.vectorizer.transform([_clean(article)])
         q_vec    = self.vectorizer.transform([_clean(question)])
         opt_vec  = self.vectorizer.transform([_clean(option)])
@@ -203,15 +248,18 @@ class InferencePipeline:
         o_toks = _tokenize(option)
         a_toks = _tokenize(article)
 
-        extra = np.array([[
+        # Full pool of 6 hand-crafted features (same order as training script)
+        all_extra = [
             cos_art_opt,
             cos_q_opt,
             cos_art_q,
             _jaccard(q_toks, o_toks),
             len(o_toks) / max(len(a_toks), 1),
             len(set(q_toks) & set(o_toks)),
-        ]], dtype=np.float32)
+        ]
 
+        # Slice to exactly n_extra columns so we always match training
+        extra = np.array([all_extra[:n_extra]], dtype=np.float32)
         return sp.hstack([X, sp.csr_matrix(extra)], format="csr")
 
     def _make_distractor_features(self, article: str, question: str,
@@ -292,10 +340,6 @@ class InferencePipeline:
 
     def rank_options(self, article: str, question: str,
                      options: Dict[str, str]) -> Dict[str, float]:
-        """
-        Score all four options and return {key: prob} dict.
-        The key with highest prob is the predicted correct answer.
-        """
         scores = {}
         for key, text in options.items():
             scores[key] = self.verify_option(article, question, text)["probability_correct"]
@@ -304,13 +348,9 @@ class InferencePipeline:
     def generate_distractors(self, article: str, question: str,
                               correct_answer: str,
                               num_distractors: int = 3) -> List[str]:
-        """
-        Returns a list of `num_distractors` plausible-but-wrong answer strings.
-        """
         if not self._ready:
             raise RuntimeError(self._error)
 
-        # If no distractor ranker trained yet, fall back to cosine-based extraction
         if self.distractor_ranker is None:
             return self._cosine_distractors(article, correct_answer, num_distractors)
 
@@ -318,7 +358,6 @@ class InferencePipeline:
         if not candidates:
             return self._w2v_distractors(correct_answer, article, num_distractors)
 
-        # Score every candidate
         scored = []
         for cand in candidates:
             feats = self._make_distractor_features(article, question, cand, correct_answer)
@@ -330,7 +369,6 @@ class InferencePipeline:
 
         scored.sort(reverse=True)
 
-        # Diversity filter: cosine similarity threshold 0.7 (spec §7.4)
         chosen: List[str] = []
         for _, cand in scored:
             if len(chosen) == num_distractors:
@@ -338,7 +376,6 @@ class InferencePipeline:
             if not self._too_similar(cand, chosen):
                 chosen.append(cand)
 
-        # Pad with Word2Vec fallback
         if len(chosen) < num_distractors:
             chosen += self._w2v_distractors(
                 correct_answer, article, num_distractors - len(chosen)
@@ -348,10 +385,6 @@ class InferencePipeline:
 
     def generate_hints(self, article: str, question: str,
                        correct_answer: str, n_hints: int = 3) -> List[str]:
-        """
-        Returns `n_hints` hints sorted from most-general (index 0)
-        to near-explicit (index n-1).
-        """
         if not self._ready:
             raise RuntimeError(self._error)
 
@@ -369,10 +402,8 @@ class InferencePipeline:
             X     = np.vstack(feats_list)
             probs = self.hint_scorer.predict_proba(X)[:, 1]
         else:
-            # Fallback: pure cosine similarity (original version)
             probs = self._cosine_sentence_scores(sentences, question)
 
-        # Pick top-n_hints unique, sorted ascending (broadest first)
         ranked_idx = np.argsort(probs)[::-1]
         top_idx: List[int] = []
         for idx in ranked_idx:
@@ -380,14 +411,10 @@ class InferencePipeline:
             if len(top_idx) == n_hints:
                 break
 
-        top_idx.sort(key=lambda i: probs[i])  # ascending → most general first
+        top_idx.sort(key=lambda i: probs[i])
         return [sentences[i] for i in top_idx]
 
     def supporting_sentence(self, article: str, correct_answer: str) -> str:
-        """
-        Return the passage sentence most likely to contain / support the answer.
-        Shown in Screen 2 as explanation after the user submits.
-        """
         sentences = _split_sentences(article)
         if not sentences:
             return ""
@@ -397,7 +424,6 @@ class InferencePipeline:
             if ans_clean in _clean(s):
                 return s
 
-        # Fall back to highest cosine sim sentence
         scores = self._cosine_sentence_scores(sentences, correct_answer)
         return sentences[int(np.argmax(scores))]
 
@@ -413,10 +439,9 @@ class InferencePipeline:
             w for w, _ in freq.most_common(100)
             if w not in ans_toks and len(w) > 3
         ]
-        # Add capitalised bigrams (proper-noun-like phrases)
         caps = re.findall(r"\b([A-Z][a-z]+ [A-Z][a-z]+)\b", passage)
         candidates += [c.lower() for c in caps if c.lower() not in answer.lower()]
-        return list(dict.fromkeys(candidates))  # deduplicated
+        return list(dict.fromkeys(candidates))
 
     def _too_similar(self, candidate: str, chosen: List[str],
                      threshold: float = 0.7) -> bool:
@@ -432,7 +457,6 @@ class InferencePipeline:
 
     def _cosine_distractors(self, article: str, correct_answer: str,
                              n: int) -> List[str]:
-        """Pure cosine-similarity distractor fallback (spec §7.4)."""
         sentences = _split_sentences(article)
         if not sentences:
             return ["Information not available."] * n
@@ -444,7 +468,7 @@ class InferencePipeline:
         except Exception:
             sims = np.zeros(len(sentences))
 
-        ranked = np.argsort(sims)   # ascending: least similar first
+        ranked = np.argsort(sims)
         distractors: List[str] = []
         for idx in ranked:
             cand = sentences[idx]
@@ -495,7 +519,6 @@ class InferencePipeline:
 _pipeline_instance: Optional[InferencePipeline] = None
 
 def load_pipeline() -> InferencePipeline:
-    """Return (or create) the global InferencePipeline singleton."""
     global _pipeline_instance
     if _pipeline_instance is None:
         _pipeline_instance = InferencePipeline()
@@ -508,17 +531,6 @@ def load_pipeline() -> InferencePipeline:
 
 def predict_answer(article: str, question: str,
                    options: Dict[str, str]) -> Dict:
-    """
-    Verify which option is correct.
-
-    Returns:
-        {
-            "predicted": "A",          # key of predicted correct option
-            "confidence": 0.84,        # probability of the predicted option
-            "scores": {"A":…,"B":…},   # raw score for all options
-            "latency_ms": 47,
-        }
-    """
     pipeline = load_pipeline()
     if not pipeline.is_ready:
         return {"error": pipeline.error_message}
@@ -538,54 +550,27 @@ def predict_answer(article: str, question: str,
 
 def generate_distractors(article: str, question: str,
                          correct_answer: str) -> List[str]:
-    """
-    Generate three plausible distractor options.
-
-    Returns: ["Played football", "Watched TV", "Stayed home"]
-    """
     pipeline = load_pipeline()
     if not pipeline.is_ready:
         raise RuntimeError(pipeline.error_message)
-
-    t0 = time.perf_counter()
-    result = pipeline.generate_distractors(article, question, correct_answer)
-    _ = (time.perf_counter() - t0) * 1000
-    return result
+    return pipeline.generate_distractors(article, question, correct_answer)
 
 
 def generate_hints(article: str, question: str,
                    correct_answer: str) -> List[str]:
-    """
-    Generate three graduated hints.
-
-    Returns: [hint1_general, hint2_specific, hint3_near_explicit]
-    """
     pipeline = load_pipeline()
     if not pipeline.is_ready:
         raise RuntimeError(pipeline.error_message)
-
     return pipeline.generate_hints(article, question, correct_answer)
 
 
 # ---------------------------------------------------------------------------
-# RACE sample loader — used by Screen 1's "Load Random Sample" button
+# RACE sample loader
 # ---------------------------------------------------------------------------
 
 def random_race_sample(split: str = "val") -> Dict:
-    """
-    Load a random row from the RACE CSV.
-
-    Returns:
-        {
-            "article": str,
-            "question": str,
-            "options": {"A": str, "B": str, "C": str, "D": str},
-            "answer": str,   # gold label key, e.g. "B"
-        }
-    """
     path = os.path.join(_DATA_RAW, f"{split}.csv")
     if not os.path.exists(path):
-        # try train as last resort
         path = os.path.join(_DATA_RAW, "train.csv")
     if not os.path.exists(path):
         raise FileNotFoundError(
@@ -615,26 +600,12 @@ def random_race_sample(split: str = "val") -> Dict:
 if __name__ == "__main__":
     print("Loading pipeline…")
     p = load_pipeline()
-    print(f"Ready: {p.is_ready}")
+    print(f"Ready       : {p.is_ready}")
+    print(f"n_extra_feats: {p._n_extra_features}")
     if p.error_message:
         print(f"Error: {p.error_message}")
     else:
         sample = random_race_sample("val")
         print(f"\nQuestion: {sample['question']}")
-        print(f"Options : {sample['options']}")
-        print(f"Gold    : {sample['answer']}")
-
         result = predict_answer(sample["article"], sample["question"], sample["options"])
-        print(f"\npredict_answer → {result}")
-
-        hints = generate_hints(sample["article"], sample["question"],
-                               sample["options"][sample["answer"]])
-        print("\nHints:")
-        for i, h in enumerate(hints, 1):
-            print(f"  Hint {i}: {h[:100]}…")
-
-        dist = generate_distractors(sample["article"], sample["question"],
-                                    sample["options"][sample["answer"]])
-        print("\nDistractors:")
-        for d in dist:
-            print(f"  ❌ {d[:80]}")
+        print(f"predict_answer → {result}")
