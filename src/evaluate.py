@@ -408,6 +408,113 @@ def evaluate_model_a(split: str, rows=None):
         print(f"  - F1_class1 > 0.35 = model is actually identifying correct answers")
 
 # ---------------------------------------------------------------------------
+# Model B helpers  (mirror model_b_train.py exactly so features match)
+# ---------------------------------------------------------------------------
+
+STOPWORDS_B = {
+    "i","me","my","myself","we","our","ours","ourselves","you","your","yours",
+    "yourself","yourselves","he","him","his","himself","she","her","hers",
+    "herself","it","its","itself","they","them","their","theirs","themselves",
+    "what","which","who","whom","this","that","these","those","am","is","are",
+    "was","were","be","been","being","have","has","had","having","do","does",
+    "did","doing","a","an","the","and","but","if","or","because","as","until",
+    "while","of","at","by","for","with","about","against","between","into",
+    "through","during","before","after","above","below","to","from","up","down",
+    "in","out","on","off","over","under","again","further","then","once","here",
+    "there","when","where","why","how","all","both","each","few","more","most",
+    "other","some","such","no","nor","not","only","own","same","so","than",
+    "too","very","s","t","can","will","just","don","should","now","d","ll",
+    "m","o","re","ve","y","ain","aren","couldn","didn","doesn","hadn","hasn",
+    "haven","isn","ma","mightn","mustn","needn","shan","shouldn","wasn",
+    "weren","won","wouldn",
+}
+
+import re as _re
+from sklearn.metrics.pairwise import cosine_similarity as _cos_sim
+from sklearn.metrics import r2_score
+
+def _b_clean(text: str) -> str:
+    text = str(text).lower()
+    text = _re.sub(r'[^\w\s]', ' ', text)
+    text = _re.sub(r'\s+', ' ', text).strip()
+    return text
+
+def _b_tokenize(text: str):
+    return [w for w in _b_clean(text).split() if w not in STOPWORDS_B and len(w) > 1]
+
+def _b_split_sentences(article: str):
+    raw = _re.split(r'(?<=[.!?])\s+', article.replace('\n', ' '))
+    return [s.strip() for s in raw if len(s.strip()) > 10]
+
+def _b_jaccard(a, b):
+    a, b = set(a), set(b)
+    if not a and not b:
+        return 0.0
+    return len(a & b) / len(a | b)
+
+def _build_distractor_features(row_dict, vectorizer, answer_col):
+    """7-feature vector — identical to model_b_train.build_distractor_features."""
+    from collections import Counter as _C
+    article       = _b_clean(row_dict['article'])
+    correct_ans   = _b_clean(answer_col)
+    candidate     = _b_clean(row_dict.get('candidate', ''))
+    if not candidate:
+        return np.zeros(7, dtype=np.float32)
+
+    try:
+        ans_vec  = vectorizer.transform([correct_ans])
+        cand_vec = vectorizer.transform([candidate])
+        art_vec  = vectorizer.transform([article])
+        sim_ans_cand = float(_cos_sim(ans_vec,  cand_vec)[0, 0])
+        sim_art_cand = float(_cos_sim(art_vec,  cand_vec)[0, 0])
+    except Exception:
+        sim_ans_cand = sim_art_cand = 0.0
+
+    chars_a      = set(correct_ans)
+    chars_c      = set(candidate)
+    char_overlap = len(chars_a & chars_c) / max(len(chars_a | chars_c), 1)
+
+    art_tokens   = _b_tokenize(row_dict['article'])
+    cand_tokens  = _b_tokenize(candidate)
+    art_freq     = _C(art_tokens)
+    cand_freq    = sum(art_freq.get(t, 0) for t in cand_tokens) / max(len(cand_tokens), 1)
+
+    article_lower = row_dict['article'].lower()
+    cand_lower    = candidate.lower().split()[0] if cand_tokens else ''
+    pos           = article_lower.find(cand_lower)
+    norm_pos      = (pos / max(len(article_lower), 1)) if pos >= 0 else 1.0
+
+    len_diff = abs(len(cand_tokens) - len(_b_tokenize(answer_col))) / max(len(_b_tokenize(answer_col)), 1)
+    jac      = _b_jaccard(cand_tokens, _b_tokenize(answer_col))
+
+    return np.array([sim_ans_cand, sim_art_cand, char_overlap,
+                     cand_freq, norm_pos, len_diff, jac], dtype=np.float32)
+
+def _build_hint_features(sentence, question, article, idx, n_sents, vectorizer):
+    """6-feature vector — identical to model_b_train.build_hint_features."""
+    import re as _r
+    q_toks  = _b_tokenize(question)
+    s_toks  = _b_tokenize(sentence)
+    overlap = len(set(q_toks) & set(s_toks))
+    pos     = idx / max(n_sents - 1, 1)
+    length  = len(s_toks)
+    try:
+        q_vec = vectorizer.transform([_b_clean(question)])
+        s_vec = vectorizer.transform([_b_clean(sentence)])
+        sim   = float(_cos_sim(q_vec, s_vec)[0, 0])
+    except Exception:
+        sim = 0.0
+    jac       = _b_jaccard(q_toks, s_toks)
+    cap_words = len(_r.findall(r'\b[A-Z][a-z]+\b', sentence))
+    return np.array([overlap, pos, length, sim, jac, cap_words], dtype=np.float32)
+
+def _precision_at_k(y_true, y_scores, k):
+    if len(y_true) < k:
+        return 0.0
+    top_k = np.argsort(y_scores)[-k:]
+    return float(y_true[top_k].mean())
+
+# ---------------------------------------------------------------------------
 # Model B Evaluation (spec Section 7.8 and 10.2)
 # ---------------------------------------------------------------------------
 
@@ -417,82 +524,265 @@ def evaluate_model_b(split: str, rows=None):
     print("="*60)
 
     csv_path = f'{RAW_DIR}/val.csv' if split == 'val' else f'{RAW_DIR}/test.csv'
-    df = load_and_clean(csv_path, rows)
+    # Load raw (not expanded) — Model B works at the question level
+    df = pd.read_csv(csv_path).dropna().reset_index(drop=True)
+    if rows:
+        df = df.head(rows)
+    for col in ['article', 'question'] + OPTION_COLS:
+        df[col] = df[col].astype(str).apply(_b_clean)
     print(f"  Loaded {len(df):,} rows")
 
     ranker_path = f'{MODEL_B_DIR}/distractor_ranker.pkl'
     hint_path   = f'{MODEL_B_DIR}/hint_scorer.pkl'
+    tfidf_path  = f'{MODEL_A_DIR}/tfidf_vectorizer.pkl'
 
     if not os.path.exists(ranker_path):
         print(f"\n  [SKIP] Model B not trained yet — run model_b_train.py first")
         return
+    if not os.path.exists(tfidf_path):
+        print(f"\n  [ERROR] TF-IDF vectorizer not found at {tfidf_path}")
+        return
 
-    tfidf_vec = joblib.load(f'{MODEL_A_DIR}/tfidf_vectorizer.pkl')
+    tfidf_vec = joblib.load(tfidf_path)
     ranker    = joblib.load(ranker_path)
 
-    # ---------------------------------------------------------------------------
-    # Distractor evaluation
-    # ---------------------------------------------------------------------------
-    print("\n  Evaluating distractor ranker...")
+    # -----------------------------------------------------------------------
+    # DISTRACTOR RANKER EVALUATION  (spec Section 7.8)
+    # -----------------------------------------------------------------------
+    print("\n" + "="*56)
+    print("  DISTRACTOR RANKER EVALUATION  (spec Section 7.8)")
+    print("="*56)
 
-    y_distractor_true = []
-    y_distractor_pred = []
-    precision_at_3_hits = 0
+    sample_d = df.head(min(500, len(df)))
+    X_d_rows, y_d_rows = [], []
+    p_at_3_hits = 0
 
-    sample = df.head(min(500, len(df)))
+    for _, row in sample_d.iterrows():
+        correct_key  = str(row['answer']).strip().upper()
+        correct_text = _b_clean(row[correct_key])
 
-    for _, row in sample.iterrows():
-        correct = str(row['answer']).strip().upper()
-
-        opt_feats = []
         for opt in OPTION_COLS:
-            art_vec = tfidf_vec.transform([row['article']])
-            opt_vec = tfidf_vec.transform([row[opt]])
-            cos     = float(1 - paired_cosine_distances(art_vec, opt_vec)[0])
-            opt_len = len(row[opt].split())
-            art_len = max(len(row['article'].split()), 1)
-            opt_feats.append([cos, opt_len, opt_len / art_len])
+            cand_text = _b_clean(row[opt])
+            label     = 0 if opt == correct_key else 1
+            row_dict  = {**row.to_dict(), 'candidate': cand_text}
+            feats     = _build_distractor_features(row_dict, tfidf_vec, correct_text)
+            X_d_rows.append(feats)
+            y_d_rows.append(label)
 
-        X_opts = np.array(opt_feats)
-        labels_true = [0 if o == correct else 1 for o in OPTION_COLS]
-
+        # Precision@3 per question
+        q_feats = np.vstack(X_d_rows[-4:])
         try:
-            labels_pred = ranker.predict(X_opts)
+            q_pred = ranker.predict(q_feats)
         except Exception:
             continue
+        pred_dist_idx  = np.argsort(q_pred)[-3:]
+        true_dist_idx  = {i for i, l in enumerate(y_d_rows[-4:]) if l == 1}
+        p_at_3_hits   += len(set(pred_dist_idx) & true_dist_idx) / 3
 
-        y_distractor_true.extend(labels_true)
-        y_distractor_pred.extend(labels_pred.tolist())
+    if X_d_rows:
+        X_d = np.vstack(X_d_rows)
+        y_d = np.array(y_d_rows)
 
-        pred_distractor_idx = np.argsort(labels_pred)[-3:]
-        true_distractors    = {i for i, l in enumerate(labels_true) if l == 1}
-        hits = len(set(pred_distractor_idx) & true_distractors)
-        precision_at_3_hits += hits / 3
+        try:
+            y_d_pred = ranker.predict(X_d)
+            has_proba = hasattr(ranker, 'predict_proba')
+            y_d_prob  = ranker.predict_proba(X_d)[:, 1] if has_proba else y_d_pred.astype(float)
+        except Exception as e:
+            print(f"  [ERROR] ranker.predict failed: {e}")
+            y_d_pred = np.zeros(len(y_d), dtype=int)
+            y_d_prob = y_d_pred.astype(float)
 
-    if y_distractor_true:
-        y_dt = np.array(y_distractor_true)
-        y_dp = np.array(y_distractor_pred)
+        acc  = accuracy_score(y_d, y_d_pred)
+        f1   = f1_score(y_d, y_d_pred, average='macro', zero_division=0)
+        prec = precision_score(y_d, y_d_pred, average='macro', zero_division=0)
+        rec  = recall_score(y_d, y_d_pred, average='macro', zero_division=0)
+        p3   = p_at_3_hits / max(len(sample_d), 1)
 
-        prec = precision_score(y_dt, y_dp, average='macro', zero_division=0)
-        rec  = recall_score(y_dt, y_dp, average='macro', zero_division=0)
-        f1   = f1_score(y_dt, y_dp, average='macro', zero_division=0)
-        acc  = accuracy_score(y_dt, y_dp)
-        p3   = precision_at_3_hits / max(len(sample), 1)
+        # Per-class
+        f1_cls   = f1_score(y_d, y_d_pred, average=None, zero_division=0)
+        prec_cls = precision_score(y_d, y_d_pred, average=None, zero_division=0)
+        rec_cls  = recall_score(y_d, y_d_pred, average=None, zero_division=0)
 
-        print(f"\n  Distractor Ranker Metrics (spec Section 7.8):")
+        print(f"\n  Accuracy     : {acc:.4f}")
+        print(f"  Macro F1     : {f1:.4f}   ← primary metric")
         print(f"  Precision    : {prec:.4f}")
         print(f"  Recall       : {rec:.4f}")
-        print(f"  Macro F1     : {f1:.4f}")
-        print(f"  Accuracy     : {acc:.4f}")
-        print(f"  Precision@3  : {p3:.4f}  (fraction of top-3 that are valid distractors)")
-        print(f"\n  Confusion Matrix:")
-        cm = confusion_matrix(y_dt, y_dp)
-        print(f"    TN={cm[0,0]}  FP={cm[0,1]}")
-        print(f"    FN={cm[1,0]}  TP={cm[1,1]}")
+        print(f"  Precision@3  : {p3:.4f}   (top-3 ranked are valid distractors)")
 
-    if os.path.exists(hint_path):
-        print(f"\n  Hint scorer found — R² would require sentence-level relevance labels")
-        print(f"  (generated during model_b_train.py and stored as evaluation artefact)")
+        # Precision@K using predict_proba scores
+        for k in [1, 3, 5]:
+            pk = _precision_at_k(y_d, y_d_prob, k)
+            print(f"  P@{k}          : {pk:.4f}")
+
+        print(f"\n  Per-Class Breakdown:")
+        print(f"  {'Class':<8} {'Precision':>10} {'Recall':>10} {'F1':>10} {'Support':>10}")
+        for c in range(len(f1_cls)):
+            sup = int((y_d == c).sum())
+            print(f"  {c:<8} {prec_cls[c]:>10.4f} {rec_cls[c]:>10.4f} {f1_cls[c]:>10.4f} {sup:>10}")
+
+        cm = confusion_matrix(y_d, y_d_pred)
+        print(f"\n  Confusion Matrix (rows=actual, cols=predicted):")
+        print(f"              Pred 0   Pred 1")
+        print(f"  Actual 0  {cm[0,0]:>8}  {cm[0,1]:>7}   (TN / FP)")
+        print(f"  Actual 1  {cm[1,0]:>8}  {cm[1,1]:>7}   (FN / TP)")
+
+        print(f"\n  Health Check:")
+        if f1 >= 0.70:
+            print(f"  [GOOD] Macro F1={f1:.4f}  → ranker is working well")
+        elif f1 >= 0.55:
+            print(f"  [OK]   Macro F1={f1:.4f}  → ranker is learning")
+        else:
+            print(f"  [WEAK] Macro F1={f1:.4f}  → ranker needs improvement")
+
+    # -----------------------------------------------------------------------
+    # HINT SCORER EVALUATION  (spec Section 7.6)
+    # -----------------------------------------------------------------------
+    print("\n" + "="*56)
+    print("  HINT SCORER EVALUATION  (spec Section 7.6)")
+    print("="*56)
+
+    if not os.path.exists(hint_path):
+        print("  [SKIP] hint_scorer.pkl not found — run model_b_train.py first")
+    else:
+        hint_scorer = joblib.load(hint_path)
+        sample_h    = df.head(min(500, len(df)))
+
+        X_h_rows, y_h_rows, sim_rows = [], [], []
+
+        for _, row in sample_h.iterrows():
+            article     = row['article']
+            question    = row['question']
+            correct_ans = _b_clean(row[str(row['answer']).strip().upper()])
+            sentences   = _b_split_sentences(article)
+            n           = len(sentences)
+            if n < 2:
+                continue
+            for idx, sent in enumerate(sentences):
+                label = int(correct_ans in _b_clean(sent))
+                feats = _build_hint_features(sent, question, article, idx, n, tfidf_vec)
+                X_h_rows.append(feats)
+                y_h_rows.append(label)
+                sim_rows.append(float(feats[3]))   # cosine sim column
+
+        if X_h_rows:
+            X_h   = np.vstack(X_h_rows)
+            y_h   = np.array(y_h_rows)
+            sim_h = np.array(sim_rows)
+
+            try:
+                y_h_pred = hint_scorer.predict(X_h)
+                y_h_prob = hint_scorer.predict_proba(X_h)[:, 1]
+            except Exception as e:
+                print(f"  [ERROR] hint_scorer.predict failed: {e}")
+                y_h_pred = np.zeros(len(y_h), dtype=int)
+                y_h_prob = y_h_pred.astype(float)
+
+            acc_h  = accuracy_score(y_h, y_h_pred)
+            f1_h   = f1_score(y_h, y_h_pred, average='macro', zero_division=0)
+            prec_h = precision_score(y_h, y_h_pred, average='macro', zero_division=0)
+            rec_h  = recall_score(y_h, y_h_pred, average='macro', zero_division=0)
+            r2_h   = r2_score(sim_h, y_h_prob)
+
+            f1_cls_h   = f1_score(y_h, y_h_pred, average=None, zero_division=0)
+            prec_cls_h = precision_score(y_h, y_h_pred, average=None, zero_division=0)
+            rec_cls_h  = recall_score(y_h, y_h_pred, average=None, zero_division=0)
+
+            print(f"\n  Accuracy     : {acc_h:.4f}")
+            print(f"  Macro F1     : {f1_h:.4f}   ← primary metric")
+            print(f"  Precision    : {prec_h:.4f}")
+            print(f"  Recall       : {rec_h:.4f}")
+            print(f"  R²           : {r2_h:.4f}   (predicted prob vs cosine-sim to question)")
+
+            for k in [1, 3, 5]:
+                pk = _precision_at_k(y_h, y_h_prob, k)
+                print(f"  P@{k}          : {pk:.4f}")
+
+            print(f"\n  Per-Class Breakdown:")
+            print(f"  {'Class':<8} {'Precision':>10} {'Recall':>10} {'F1':>10} {'Support':>10}")
+            for c in range(len(f1_cls_h)):
+                sup = int((y_h == c).sum())
+                print(f"  {c:<8} {prec_cls_h[c]:>10.4f} {rec_cls_h[c]:>10.4f} {f1_cls_h[c]:>10.4f} {sup:>10}")
+
+            cm_h = confusion_matrix(y_h, y_h_pred)
+            print(f"\n  Confusion Matrix (rows=actual, cols=predicted):")
+            print(f"              Pred 0   Pred 1")
+            print(f"  Actual 0  {cm_h[0,0]:>8}  {cm_h[0,1]:>7}   (TN / FP)")
+            print(f"  Actual 1  {cm_h[1,0]:>8}  {cm_h[1,1]:>7}   (FN / TP)")
+
+            print(f"\n  Health Check:")
+            if f1_h >= 0.60:
+                print(f"  [GOOD] Macro F1={f1_h:.4f}  → hint scorer is working well")
+            elif f1_h >= 0.45:
+                print(f"  [OK]   Macro F1={f1_h:.4f}  → hint scorer is learning")
+            else:
+                print(f"  [WEAK] Macro F1={f1_h:.4f}  → hint scorer needs improvement")
+            if r2_h > 0.10:
+                print(f"  [GOOD] R²={r2_h:.4f}  → predicted scores correlate with cosine similarity")
+            else:
+                print(f"  [WEAK] R²={r2_h:.4f}  → low correlation between scores and cosine similarity")
+        else:
+            print("  [WARN] No hint sentences extracted from this split")
+
+    # -----------------------------------------------------------------------
+    # WORD2VEC EVALUATION  (spec Section 7.5)
+    # -----------------------------------------------------------------------
+    print("\n" + "="*56)
+    print("  WORD2VEC EVALUATION  (spec Section 7.5)")
+    print("="*56)
+
+    w2v_path = f'{MODEL_B_DIR}/word2vec_model.bin'
+    if os.path.exists(w2v_path):
+        try:
+            from gensim.models import Word2Vec as _W2V
+            w2v  = _W2V.load(w2v_path)
+            wv   = w2v.wv
+            vocab_size = len(wv)
+            print(f"  Vocabulary size : {vocab_size:,}")
+            print(f"  Vector size     : {wv.vector_size}")
+
+            # Nearest-neighbour sanity checks on common words
+            test_words = ['student', 'school', 'read', 'answer', 'question']
+            print(f"\n  Nearest-neighbour sanity check (top-3):")
+            for w in test_words:
+                if w in wv:
+                    nbs = wv.most_similar(w, topn=3)
+                    nb_str = ', '.join(f"{n}({s:.2f})" for n, s in nbs)
+                    print(f"    {w:<12} → {nb_str}")
+                else:
+                    print(f"    {w:<12} → [not in vocabulary]")
+
+            # Coverage: fraction of val answer tokens in vocab
+            total_tokens, covered = 0, 0
+            for _, row in df.head(200).iterrows():
+                ans_tokens = _b_tokenize(row[str(row['answer']).strip().upper()])
+                for t in ans_tokens:
+                    total_tokens += 1
+                    if t in wv:
+                        covered += 1
+            coverage = covered / max(total_tokens, 1)
+            print(f"\n  Answer-token vocab coverage : {coverage:.4f}  ({covered}/{total_tokens})")
+            if coverage >= 0.80:
+                print(f"  [GOOD] ≥80% of answer tokens are in Word2Vec vocab")
+            elif coverage >= 0.60:
+                print(f"  [OK]   60–80% coverage — reasonable for a small corpus")
+            else:
+                print(f"  [WEAK] <60% coverage — Word2Vec may produce poor distractors")
+        except Exception as e:
+            print(f"  [ERROR] Could not load Word2Vec model: {e}")
+    else:
+        print("  [SKIP] word2vec_model.bin not found — run model_b_train.py first")
+
+    # -----------------------------------------------------------------------
+    # MODEL B SUMMARY TABLE
+    # -----------------------------------------------------------------------
+    print("\n" + "="*60)
+    print("  MODEL B SUMMARY")
+    print("="*60)
+    print(f"  {'Component':<25} {'Status'}")
+    print(f"  {'-'*50}")
+    print(f"  {'Distractor Ranker':<25} {'loaded' if os.path.exists(ranker_path) else 'MISSING'}")
+    print(f"  {'Hint Scorer':<25} {'loaded' if os.path.exists(hint_path) else 'MISSING'}")
+    print(f"  {'Word2Vec':<25} {'loaded' if os.path.exists(w2v_path) else 'MISSING'}")
 
 # ---------------------------------------------------------------------------
 # Main
