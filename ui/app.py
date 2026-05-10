@@ -1,5 +1,6 @@
 # =============================================================================
 # ui/app.py — RACE Reading Comprehension & Quiz System
+# Revamped UI: Deep-sea Glassmorphism · Teal/Emerald palette
 # All four required screens (spec §9.2):
 #   Screen 1 — Article Input
 #   Screen 2 — Question & Answer Quiz View
@@ -37,227 +38,687 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Global CSS
+# Global CSS — Deep-sea Glassmorphism + Teal/Emerald
 # ---------------------------------------------------------------------------
 st.markdown("""
 <style>
 /* ── Fonts ─────────────────────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=DM+Sans:wght@300;400;500;600&family=DM+Mono&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;0,9..144,700;0,9..144,900;1,9..144,300;1,9..144,500&family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 /* ── Root variables ─────────────────────────────────────────────────────── */
 :root {
-    --bg:        #0d1117;
-    --surface:   #161b22;
-    --surface2:  #21262d;
-    --border:    #30363d;
-    --accent:    #e6a817;
-    --accent2:   #c08010;
-    --text:      #e6edf3;
-    --muted:     #8b949e;
-    --green:     #3fb950;
-    --red:       #f85149;
-    --blue:      #58a6ff;
-    --radius:    10px;
+    --bg0:          #020d0b;
+    --bg1:          #061410;
+    --bg2:          #0a1e19;
+    --bg3:          #0d2820;
+    --glass:        rgba(13, 40, 32, 0.60);
+    --glass-heavy:  rgba(6, 20, 16, 0.80);
+    --glass-light:  rgba(20, 60, 48, 0.35);
+    --glow:         rgba(45, 212, 191, 0.18);
+    --glow2:        rgba(16, 185, 129, 0.12);
+    --border:       rgba(45, 212, 191, 0.14);
+    --border2:      rgba(45, 212, 191, 0.28);
+    --teal:         #2dd4bf;
+    --teal2:        #14b8a6;
+    --emerald:      #10b981;
+    --emerald2:     #059669;
+    --mint:         #6ee7b7;
+    --sky:          #67e8f9;
+    --amber:        #f59e0b;
+    --coral:        #fb7185;
+    --text:         #f0fdf9;
+    --text2:        #99f6e4;
+    --muted:        #5eead4;
+    --dim:          #2d6b5e;
+    --blur:         blur(24px);
+    --blur2:        blur(14px);
+    --r-sm:         8px;
+    --r:            14px;
+    --r-lg:         22px;
+    --r-xl:         32px;
 }
 
-/* ── Base ───────────────────────────────────────────────────────────────── */
+/* ── Animated radial mesh background ───────────────────────────────────── */
 html, body, [data-testid="stApp"] {
-    background-color: var(--bg) !important;
+    background: var(--bg0) !important;
     color: var(--text) !important;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Syne', sans-serif;
     font-size: 15px;
+}
+
+[data-testid="stApp"]::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+        radial-gradient(ellipse 900px 600px at 10% 15%, rgba(45,212,191,0.07) 0%, transparent 65%),
+        radial-gradient(ellipse 600px 800px at 90% 85%, rgba(16,185,129,0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 700px 400px at 50% 50%, rgba(20,184,166,0.04) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+    animation: meshDrift 18s ease-in-out infinite alternate;
+}
+
+@keyframes meshDrift {
+    0%   { opacity: 0.8; }
+    100% { opacity: 1.0; }
+}
+
+/* ── Noise grain overlay ────────────────────────────────────────────────── */
+[data-testid="stApp"]::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.4;
 }
 
 /* ── Sidebar ────────────────────────────────────────────────────────────── */
 [data-testid="stSidebar"] {
-    background: var(--surface) !important;
-    border-right: 1px solid var(--border);
+    background: var(--glass-heavy) !important;
+    backdrop-filter: var(--blur) !important;
+    -webkit-backdrop-filter: var(--blur) !important;
+    border-right: 1px solid var(--border) !important;
 }
 [data-testid="stSidebar"] * { color: var(--text) !important; }
+[data-testid="stSidebar"] > div:first-child { padding-top: 0 !important; }
+
+/* ── Main block padding ─────────────────────────────────────────────────── */
+.main .block-container {
+    padding-top: 2.5rem !important;
+    padding-bottom: 4rem !important;
+    max-width: 1100px;
+}
+
+/* ── Page entry animation ───────────────────────────────────────────────── */
+[data-testid="stVerticalBlock"] {
+    animation: pageIn 0.4s cubic-bezier(0.22,1,0.36,1) both;
+}
+@keyframes pageIn {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
 
 /* ── Headers ────────────────────────────────────────────────────────────── */
-h1, h2, h3, h4 { font-family: 'Playfair Display', serif; color: var(--text); }
+h1, h2, h3, h4 {
+    font-family: 'Fraunces', serif;
+    color: var(--text);
+    letter-spacing: -0.02em;
+}
 
 /* ── Buttons ────────────────────────────────────────────────────────────── */
 .stButton > button {
-    background: var(--accent) !important;
-    color: #0d1117 !important;
+    background: linear-gradient(145deg, var(--teal2), var(--emerald2)) !important;
+    color: var(--bg0) !important;
     border: none !important;
-    border-radius: var(--radius) !important;
-    font-family: 'DM Sans', sans-serif !important;
-    font-weight: 600 !important;
-    font-size: 14px !important;
-    padding: 0.55rem 1.4rem !important;
-    transition: background 0.2s, transform 0.1s;
+    border-radius: var(--r) !important;
+    font-family: 'Syne', sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 13.5px !important;
+    letter-spacing: 0.03em !important;
+    padding: 0.58rem 1.5rem !important;
+    box-shadow: 0 0 0 1px rgba(45,212,191,0.3), 0 4px 20px rgba(20,184,166,0.25) !important;
+    transition: all 0.2s cubic-bezier(0.22,1,0.36,1) !important;
     cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+.stButton > button::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, transparent 60%);
+    pointer-events: none;
 }
 .stButton > button:hover {
-    background: var(--accent2) !important;
-    transform: translateY(-1px);
+    background: linear-gradient(145deg, var(--teal), var(--teal2)) !important;
+    box-shadow: 0 0 0 1px rgba(45,212,191,0.5), 0 8px 32px rgba(45,212,191,0.35) !important;
+    transform: translateY(-2px) scale(1.01) !important;
 }
-.stButton > button:active { transform: translateY(0); }
+.stButton > button:active {
+    transform: translateY(0) scale(0.99) !important;
+    box-shadow: 0 0 0 1px rgba(45,212,191,0.3), 0 2px 8px rgba(20,184,166,0.2) !important;
+}
+.stButton > button:disabled {
+    background: rgba(45,212,191,0.1) !important;
+    color: var(--dim) !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
 
-/* ── Text areas & inputs ────────────────────────────────────────────────── */
+/* ── Text areas ─────────────────────────────────────────────────────────── */
 textarea, .stTextArea textarea {
-    background: var(--surface2) !important;
+    background: var(--glass) !important;
     color: var(--text) !important;
     border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    font-family: 'DM Sans', sans-serif !important;
+    border-radius: var(--r) !important;
+    font-family: 'Syne', sans-serif !important;
     font-size: 14px !important;
+    backdrop-filter: var(--blur2) !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+    resize: vertical;
 }
-textarea:focus { border-color: var(--accent) !important; outline: none !important; }
+textarea:focus, .stTextArea textarea:focus {
+    border-color: var(--teal) !important;
+    box-shadow: 0 0 0 3px rgba(45,212,191,0.15), 0 2px 16px rgba(45,212,191,0.1) !important;
+    outline: none !important;
+}
 
-/* ── Selectbox / radio ──────────────────────────────────────────────────── */
-.stSelectbox > div, .stRadio > div { color: var(--text) !important; }
-[data-baseweb="select"] { background: var(--surface2) !important; border-color: var(--border) !important; }
-[data-baseweb="radio"] label { font-size: 14px !important; }
+/* ── Text input ─────────────────────────────────────────────────────────── */
+input[type="text"], .stTextInput input {
+    background: var(--glass) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--r-sm) !important;
+    font-family: 'Syne', sans-serif !important;
+    backdrop-filter: var(--blur2) !important;
+}
+input[type="text"]:focus, .stTextInput input:focus {
+    border-color: var(--teal) !important;
+    box-shadow: 0 0 0 3px rgba(45,212,191,0.15) !important;
+    outline: none !important;
+}
 
-/* ── Cards ──────────────────────────────────────────────────────────────── */
-.card {
-    background: var(--surface);
+/* ── Selectbox ──────────────────────────────────────────────────────────── */
+.stSelectbox > div { color: var(--text) !important; }
+[data-baseweb="select"] {
+    background: var(--glass) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--r-sm) !important;
+    backdrop-filter: var(--blur2) !important;
+}
+[data-baseweb="select"] * { color: var(--text) !important; background: var(--bg2) !important; }
+
+/* ── Glass card ─────────────────────────────────────────────────────────── */
+.gcard {
+    background: var(--glass);
+    backdrop-filter: var(--blur);
+    -webkit-backdrop-filter: var(--blur);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.4rem 1.6rem;
+    border-radius: var(--r-lg);
+    padding: 1.6rem 1.8rem;
     margin-bottom: 1rem;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04);
+    transition: border-color 0.25s, box-shadow 0.25s;
+    position: relative;
+    overflow: hidden;
 }
-.card-accent { border-left: 4px solid var(--accent); }
-.card-green  { border-left: 4px solid var(--green); }
-.card-red    { border-left: 4px solid var(--red); }
-.card-blue   { border-left: 4px solid var(--blue); }
+.gcard::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(45,212,191,0.3), transparent);
+}
+.gcard:hover {
+    border-color: rgba(45,212,191,0.25);
+    box-shadow: 0 12px 50px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.gcard-teal   { border-left: 3px solid var(--teal); }
+.gcard-emerald{ border-left: 3px solid var(--emerald); background: rgba(16,185,129,0.06); }
+.gcard-coral  { border-left: 3px solid var(--coral); background: rgba(251,113,133,0.05); }
+.gcard-sky    { border-left: 3px solid var(--sky); }
+.gcard-amber  { border-left: 3px solid var(--amber); }
 
 /* ── Metric boxes ───────────────────────────────────────────────────────── */
-.metric-box {
-    background: var(--surface2);
+.mbox {
+    background: var(--glass);
+    backdrop-filter: var(--blur2);
+    -webkit-backdrop-filter: var(--blur2);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1rem;
+    border-radius: var(--r-lg);
+    padding: 1.4rem 1rem 1.2rem;
     text-align: center;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    position: relative;
+    overflow: hidden;
 }
-.metric-box .metric-val {
-    font-family: 'DM Mono', monospace;
-    font-size: 2rem;
+.mbox::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--teal), transparent);
+    opacity: 0.5;
+}
+.mbox:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 48px rgba(45,212,191,0.12);
+    border-color: rgba(45,212,191,0.25);
+}
+.mbox .mv {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2.2rem;
+    font-weight: 500;
+    color: var(--teal);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+}
+.mbox .ml {
+    font-size: 10.5px;
     font-weight: 700;
-    color: var(--accent);
-}
-.metric-box .metric-lbl {
-    font-size: 12px;
-    color: var(--muted);
+    color: var(--dim);
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.14em;
+    margin-top: 6px;
+    font-family: 'Syne', sans-serif;
 }
 
-/* ── Option buttons ─────────────────────────────────────────────────────── */
-.option-btn {
-    display: block;
-    width: 100%;
-    background: var(--surface2);
-    border: 2px solid var(--border);
-    border-radius: var(--radius);
-    padding: 0.85rem 1.2rem;
-    margin: 0.4rem 0;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 14px;
-    color: var(--text);
-    cursor: pointer;
-    text-align: left;
-    transition: border-color 0.15s, background 0.15s;
-}
-.option-btn:hover { border-color: var(--accent); background: #1d2229; }
-.option-btn.selected { border-color: var(--accent); background: #1d2229; }
-.option-btn.correct  { border-color: var(--green); background: #0d2116; }
-.option-btn.wrong    { border-color: var(--red);   background: #2a0d0d; }
+/* ── Answer option buttons — purely via st.button CSS overrides ─────────── */
 
-/* ── Hint cards ─────────────────────────────────────────────────────────── */
-.hint-card {
-    background: var(--surface2);
-    border-left: 3px solid var(--blue);
-    border-radius: 0 var(--radius) var(--radius) 0;
-    padding: 0.9rem 1.2rem;
-    margin: 0.5rem 0;
-    font-size: 14px;
-    line-height: 1.6;
+/* Base option style — overrides the global button style */
+div[data-testid="stButton"]:has(button[kind="secondary"]) > button,
+div[data-testid="stButton"] > button[kind="secondary"] {
+    background: var(--glass) !important;
+    backdrop-filter: var(--blur2) !important;
+    -webkit-backdrop-filter: var(--blur2) !important;
+    color: var(--text) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--r) !important;
+    padding: 0.9rem 1.4rem !important;
+    font-family: 'Syne', sans-serif !important;
+    font-size: 14.5px !important;
+    font-weight: 500 !important;
+    letter-spacing: 0.01em !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.2) !important;
+    transition: all 0.18s cubic-bezier(0.22,1,0.36,1) !important;
+    margin: 0.22rem 0 !important;
 }
-.hint-card .hint-badge {
-    display: inline-block;
-    background: var(--blue);
-    color: #0d1117;
-    font-size: 11px;
-    font-weight: 700;
-    border-radius: 4px;
-    padding: 2px 8px;
-    margin-bottom: 0.4rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+div[data-testid="stButton"] > button[kind="secondary"]:hover {
+    border-color: rgba(45,212,191,0.38) !important;
+    background: rgba(45,212,191,0.07) !important;
+    box-shadow: 0 4px 20px rgba(45,212,191,0.1) !important;
+    transform: translateX(4px) !important;
+    color: var(--text) !important;
 }
 
-/* ── Article display ────────────────────────────────────────────────────── */
-.article-box {
-    background: var(--surface2);
+/* Selected state */
+.opt-selected-btn + div button,
+.opt-selected-btn ~ div[data-testid="stButton"] button {
+    border-color: rgba(45,212,191,0.5) !important;
+    background: rgba(45,212,191,0.1) !important;
+    box-shadow: 0 0 0 2px rgba(45,212,191,0.2), 0 4px 20px rgba(45,212,191,0.12) !important;
+    color: var(--teal) !important;
+}
+
+/* Correct state */
+.opt-correct-btn + div button,
+.opt-correct-btn ~ div[data-testid="stButton"] button {
+    border-color: rgba(16,185,129,0.55) !important;
+    background: rgba(16,185,129,0.1) !important;
+    box-shadow: 0 0 0 2px rgba(16,185,129,0.2) !important;
+    color: #4ade80 !important;
+    cursor: default !important;
+}
+
+/* Wrong state */
+.opt-wrong-btn + div button,
+.opt-wrong-btn ~ div[data-testid="stButton"] button {
+    border-color: rgba(251,113,133,0.5) !important;
+    background: rgba(251,113,133,0.07) !important;
+    color: var(--coral) !important;
+    cursor: default !important;
+}
+
+/* Neutral (other options after check) */
+.opt-neutral-btn + div button,
+.opt-neutral-btn ~ div[data-testid="stButton"] button {
+    opacity: 0.5 !important;
+    cursor: default !important;
+}
+
+.opt-btn-wrap { margin: 0; padding: 0; height: 0; overflow: hidden; }
+
+/* ── Hint card ──────────────────────────────────────────────────────────── */
+.hcard {
+    background: var(--glass);
+    backdrop-filter: var(--blur2);
+    -webkit-backdrop-filter: var(--blur2);
     border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.2rem 1.5rem;
-    font-size: 14px;
+    border-left: 3px solid var(--sky);
+    border-radius: 0 var(--r) var(--r) 0;
+    padding: 1.1rem 1.5rem;
+    margin: 0.6rem 0;
+    font-size: 14.5px;
     line-height: 1.75;
-    max-height: 280px;
-    overflow-y: auto;
-    color: var(--text);
+    color: var(--text2);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    animation: hintSlide 0.4s cubic-bezier(0.22,1,0.36,1) both;
 }
-.article-box::-webkit-scrollbar { width: 5px; }
-.article-box::-webkit-scrollbar-track { background: var(--surface); }
-.article-box::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-/* ── Section titles ─────────────────────────────────────────────────────── */
-.section-title {
-    font-family: 'Playfair Display', serif;
-    font-size: 1.15rem;
+@keyframes hintSlide {
+    from { opacity: 0; transform: translateX(-16px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+.hbadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(103,232,249,0.1);
+    border: 1px solid rgba(103,232,249,0.25);
+    color: var(--sky);
+    font-size: 10.5px;
     font-weight: 700;
-    color: var(--accent);
-    margin-bottom: 0.7rem;
+    border-radius: 6px;
+    padding: 3px 10px;
+    margin-bottom: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-family: 'Syne', sans-serif;
+}
+.hcard-locked {
+    background: rgba(6,20,16,0.4);
+    border: 1px solid rgba(45,212,191,0.06);
+    border-left: 3px solid rgba(45,212,191,0.1);
+    border-radius: 0 var(--r) var(--r) 0;
+    padding: 1.1rem 1.5rem;
+    margin: 0.6rem 0;
+    filter: blur(2.5px);
+    opacity: 0.3;
+    user-select: none;
+}
+
+/* ── Article box ────────────────────────────────────────────────────────── */
+.art-box {
+    background: rgba(2,13,11,0.75);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 1.4rem 1.8rem;
+    font-size: 14px;
+    line-height: 1.9;
+    max-height: 300px;
+    overflow-y: auto;
+    color: var(--text2);
+    font-family: 'Syne', sans-serif;
+}
+.art-box::-webkit-scrollbar { width: 4px; }
+.art-box::-webkit-scrollbar-track { background: transparent; }
+.art-box::-webkit-scrollbar-thumb {
+    background: var(--teal2);
+    border-radius: 4px;
+    opacity: 0.5;
+}
+
+/* ── Section label ──────────────────────────────────────────────────────── */
+.slabel {
+    font-family: 'Syne', sans-serif;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    margin-bottom: 0.8rem;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 6px;
+}
+.slabel::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--border), transparent);
 }
 
-/* ── Tag badge ──────────────────────────────────────────────────────────── */
+/* ── Badges ─────────────────────────────────────────────────────────────── */
 .badge {
-    display: inline-block;
-    padding: 2px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 12px;
     border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
+    font-size: 11.5px;
+    font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    letter-spacing: 0.04em;
 }
-.badge-gold   { background: #3a2c00; color: var(--accent); border: 1px solid var(--accent); }
-.badge-green  { background: #0d2116; color: var(--green);  border: 1px solid var(--green); }
-.badge-red    { background: #2a0d0d; color: var(--red);    border: 1px solid var(--red); }
-.badge-blue   { background: #0d1f3a; color: var(--blue);   border: 1px solid var(--blue); }
+.bg-teal    { background: rgba(45,212,191,0.12); color: var(--teal);   border: 1px solid rgba(45,212,191,0.3); }
+.bg-emerald { background: rgba(16,185,129,0.12); color: #4ade80;       border: 1px solid rgba(16,185,129,0.3); }
+.bg-coral   { background: rgba(251,113,133,0.12);color: var(--coral);  border: 1px solid rgba(251,113,133,0.3); }
+.bg-amber   { background: rgba(245,158,11,0.12); color: var(--amber);  border: 1px solid rgba(245,158,11,0.3); }
+.bg-sky     { background: rgba(103,232,249,0.12);color: var(--sky);    border: 1px solid rgba(103,232,249,0.3); }
 
-/* ── Dividers ───────────────────────────────────────────────────────────── */
-hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+/* ── Divider ────────────────────────────────────────────────────────────── */
+hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1.4rem 0;
+}
+.hr-glow {
+    border: none;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(45,212,191,0.3), transparent);
+    margin: 1.4rem 0;
+}
 
 /* ── Dataframe ──────────────────────────────────────────────────────────── */
-[data-testid="stDataFrame"] { border-radius: var(--radius); overflow: hidden; }
+[data-testid="stDataFrame"] {
+    border-radius: var(--r) !important;
+    overflow: hidden;
+    border: 1px solid var(--border) !important;
+}
 
 /* ── Spinner ────────────────────────────────────────────────────────────── */
-.stSpinner > div { color: var(--accent) !important; }
+.stSpinner > div { color: var(--teal) !important; }
 
-/* ── Info / warning / error ─────────────────────────────────────────────── */
-.stAlert { border-radius: var(--radius) !important; }
+/* ── Streamlit alerts ───────────────────────────────────────────────────── */
+.stAlert {
+    background: var(--glass) !important;
+    backdrop-filter: var(--blur2) !important;
+    border: 1px solid var(--border) !important;
+    border-radius: var(--r) !important;
+    color: var(--text) !important;
+}
 
 /* ── Progress bar ───────────────────────────────────────────────────────── */
-.stProgress > div > div { background: var(--accent) !important; }
+.stProgress > div > div { background: var(--teal) !important; }
 
 /* ── Expander ───────────────────────────────────────────────────────────── */
 [data-testid="stExpander"] {
+    background: var(--glass) !important;
+    backdrop-filter: var(--blur2) !important;
     border: 1px solid var(--border) !important;
-    border-radius: var(--radius) !important;
-    background: var(--surface) !important;
+    border-radius: var(--r) !important;
+}
+[data-testid="stExpander"] summary {
+    color: var(--text2) !important;
+    font-family: 'Syne', sans-serif !important;
+    font-size: 13.5px !important;
 }
 
-/* WCAG AA contrast enforcement */
-* { min-font-size: 14px; }
+/* ── Loading overlay ────────────────────────────────────────────────────── */
+.lov {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 13, 11, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    z-index: 99999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    animation: lovIn 0.2s ease;
+}
+@keyframes lovIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+.lring {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 2px solid rgba(45,212,191,0.1);
+    border-top-color: var(--teal);
+    border-right-color: rgba(45,212,191,0.4);
+    animation: lspin 0.85s linear infinite;
+    box-shadow: 0 0 24px rgba(45,212,191,0.2);
+}
+.lring2 {
+    position: absolute;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    border-bottom-color: rgba(103,232,249,0.5);
+    animation: lspin 1.4s linear infinite reverse;
+}
+@keyframes lspin { to { transform: rotate(360deg); } }
+.ltxt {
+    margin-top: 1.4rem;
+    font-family: 'Syne', sans-serif;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-align: center;
+}
+.ldots::after {
+    content: '';
+    animation: ldot 1.6s steps(4, end) infinite;
+}
+@keyframes ldot {
+    0%   { content: ''; }
+    25%  { content: '.'; }
+    50%  { content: '..'; }
+    75%  { content: '...'; }
+}
+.lpulse {
+    position: relative;
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.lpulse::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 1px solid rgba(45,212,191,0.15);
+    animation: lpulseAnim 2s ease-in-out infinite;
+}
+@keyframes lpulseAnim {
+    0%, 100% { transform: scale(1); opacity: 0.5; }
+    50% { transform: scale(1.15); opacity: 0.1; }
+}
+
+/* ── Nav active state ───────────────────────────────────────────────────── */
+.nav-active {
+    background: rgba(45,212,191,0.1);
+    border-left: 3px solid var(--teal);
+    border-radius: 0 var(--r-sm) var(--r-sm) 0;
+    padding: 0.6rem 0.9rem;
+    margin: 3px 0;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--teal);
+    font-family: 'Syne', sans-serif;
+    letter-spacing: 0.02em;
+    cursor: default;
+}
+
+/* ── Sidebar logo ───────────────────────────────────────────────────────── */
+.sidebar-logo {
+    padding: 1.8rem 0.5rem 1.4rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1.2rem;
+}
+.sidebar-logo .brand {
+    font-family: 'Fraunces', serif;
+    font-size: 1.85rem;
+    font-weight: 900;
+    color: var(--teal);
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+}
+.sidebar-logo .sub {
+    font-family: 'Syne', sans-serif;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    margin-top: 5px;
+}
+.sidebar-logo .tagline {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-size: 12.5px;
+    color: rgba(45,212,191,0.5);
+    margin-top: 2px;
+}
+
+/* ── Page header ────────────────────────────────────────────────────────── */
+.ph-wrap {
+    margin-bottom: 2rem;
+}
+.ph-eyebrow {
+    font-family: 'Syne', sans-serif;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    margin-bottom: 0.35rem;
+}
+.ph-title {
+    font-family: 'Fraunces', serif;
+    font-size: 2.5rem;
+    font-weight: 900;
+    color: var(--text);
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    margin: 0;
+}
+.ph-title span { color: var(--teal); }
+.ph-sub {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    color: var(--dim);
+    margin-top: 0.5rem;
+    line-height: 1.6;
+}
+
+/* scrollbar global */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(45,212,191,0.25) transparent;
+}
+
+/* ── Stray stApp z-index fix ────────────────────────────────────────────── */
+.main { position: relative; z-index: 2; }
+[data-testid="stSidebar"] { position: relative; z-index: 3; }
 </style>
 """, unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# Loading overlay helper
+# ---------------------------------------------------------------------------
+
+def _show_loading(message="Processing"):
+    st.markdown(
+        f"""
+        <div class="lov">
+            <div class="lpulse">
+                <div class="lring"></div>
+                <div class="lring2"></div>
+            </div>
+            <div class="ltxt">{message}<span class="ldots"></span></div>
+            <div style="margin-top:0.5rem;font-family:'JetBrains Mono',monospace;
+                        font-size:10px;color:rgba(45,212,191,0.25);letter-spacing:0.1em;">
+                RACE QUIZ SYSTEM
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 # ---------------------------------------------------------------------------
 # Lazy-load pipeline (cached across Streamlit reruns)
@@ -284,27 +745,32 @@ def _pipeline_ready():
 def _init_state():
     defaults = {
         # Navigation
-        "screen": "input",           # input | quiz | hints | dashboard
-        # Article / question
-        "article":    "",
-        "question":   "",
-        "options":    {},            # {"A":…,"B":…,"C":…,"D":…}
-        "gold_answer":"",            # ground-truth key (if RACE sample)
-        "correct_answer_text": "",   # text of correct option
+        "screen": "input",
+        # Content
+        "article":              "",
+        "question":             "",
+        "options":              {},
+        "gold_answer":          "",
+        "correct_answer_text":  "",
+        # Passage version — bump on every new passage load so all widget keys refresh
+        "passage_version":      0,
         # Quiz state
-        "selected_option":  None,    # key chosen by user
-        "quiz_checked":     False,   # whether Check was pressed
-        "predict_result":   None,    # dict from predict_answer
-        "supporting_sent":  "",
+        "selected_option":      None,
+        "quiz_checked":         False,
+        "predict_result":       None,
+        "supporting_sent":      "",
         # Hints
-        "hints":           [],
-        "hints_revealed":  0,        # how many hints shown
-        "answer_revealed": False,
+        "hints":                [],
+        "hints_revealed":       0,
+        "answer_revealed":      False,
         # Distractors
-        "distractors":     [],
+        "distractors":          [],
         # Analytics log
-        "log": [],                   # list of dicts
-        "session_start": datetime.datetime.now().isoformat(),
+        "log":                  [],
+        "session_start":        datetime.datetime.now().isoformat(),
+        # Loading
+        "_loading":             False,
+        "_loading_msg":         "Processing",
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -312,19 +778,39 @@ def _init_state():
 
 _init_state()
 
+
+def _reset_quiz_state():
+    """Wipe ALL question/answer-dependent state — called on every new passage."""
+    st.session_state.quiz_checked       = False
+    st.session_state.selected_option    = None
+    st.session_state.predict_result     = None
+    st.session_state.supporting_sent    = ""
+    st.session_state.hints              = []
+    st.session_state.hints_revealed     = 0
+    st.session_state.answer_revealed    = False
+    st.session_state.distractors        = []
+    st.session_state.question           = ""
+    st.session_state.options            = {}
+    st.session_state.gold_answer        = ""
+    st.session_state.correct_answer_text= ""
+    # Bump passage_version so every widget key tied to it becomes a new widget
+    st.session_state.passage_version   += 1
+
+
 # ---------------------------------------------------------------------------
 # Analytics logger
 # ---------------------------------------------------------------------------
 
 def _log(event: str, latency_ms: float = 0.0, extra: dict = None):
     entry = {
-        "timestamp": datetime.datetime.now().strftime("%H:%M:%S"),
-        "event":     event,
-        "latency_ms": round(latency_ms, 1),
+        "timestamp":   datetime.datetime.now().strftime("%H:%M:%S"),
+        "event":       event,
+        "latency_ms":  round(latency_ms, 1),
     }
     if extra:
         entry.update(extra)
     st.session_state.log.append(entry)
+
 
 # ---------------------------------------------------------------------------
 # Sidebar navigation
@@ -332,54 +818,56 @@ def _log(event: str, latency_ms: float = 0.0, extra: dict = None):
 
 with st.sidebar:
     st.markdown("""
-    <div style='margin-bottom:1.5rem;'>
-        <div style='font-family:"Playfair Display",serif;font-size:1.4rem;
-                    font-weight:900;color:#e6a817;line-height:1.2;'>
-            RACE Quiz
-        </div>
-        <div style='font-size:12px;color:#8b949e;margin-top:4px;'>
-            AI-Powered Reading Comprehension
-        </div>
+    <div class="sidebar-logo">
+        <div class="brand">RACE</div>
+        <div class="tagline">Reading Comprehension</div>
+        <div class="sub">AI Quiz System</div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("---")
-
     pages = {
-        "📄  Article Input":      "input",
-        "❓  Quiz View":          "quiz",
-        "💡  Hint Panel":         "hints",
-        "📊  Analytics Dashboard":"dashboard",
+        "📄  Article Input":        "input",
+        "❓  Quiz View":            "quiz",
+        "💡  Hint Panel":           "hints",
+        "📊  Analytics":            "dashboard",
     }
 
     for label, screen_id in pages.items():
         active = st.session_state.screen == screen_id
-        style  = "background:#21262d;border-left:3px solid #e6a817;" if active else ""
-        if st.button(
-            label,
-            key=f"nav_{screen_id}",
-            use_container_width=True,
-        ):
-            st.session_state.screen = screen_id
-            st.rerun()
+        if active:
+            st.markdown(
+                f'<div class="nav-active">{label}</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            if st.button(label, key=f"nav_{screen_id}", use_container_width=True):
+                st.session_state.screen = screen_id
+                st.rerun()
 
-    st.markdown("---")
+    st.markdown('<div class="hr-glow"></div>', unsafe_allow_html=True)
 
     # Pipeline status
     ready, pipeline, pipeline_err = _pipeline_ready()
     if ready:
-        st.markdown('<span class="badge badge-green">● Pipeline Ready</span>',
+        st.markdown('<span class="badge bg-emerald">● Pipeline Ready</span>',
                     unsafe_allow_html=True)
     else:
-        st.markdown('<span class="badge badge-red">● Pipeline Offline</span>',
+        st.markdown('<span class="badge bg-coral">● Pipeline Offline</span>',
                     unsafe_allow_html=True)
         if pipeline_err:
-            st.caption(pipeline_err)
+            with st.expander("Error details", expanded=False):
+                st.caption(pipeline_err)
 
     st.markdown(f"""
-    <div style='font-size:11px;color:#8b949e;margin-top:1.5rem;'>
-        Session started<br>{st.session_state.session_start[:19]}<br>
-        Inferences: {len(st.session_state.log)}
+    <div style='margin-top:1.4rem;font-family:"JetBrains Mono",monospace;
+                font-size:10.5px;color:{('rgba(45,212,191,0.35)')};
+                line-height:2;letter-spacing:0.04em;'>
+        SESSION STARTED<br>
+        <span style='color:rgba(45,212,191,0.6);'>
+            {st.session_state.session_start[:19]}
+        </span><br>
+        INFERENCES &nbsp;
+        <span style='color:rgba(45,212,191,0.6);'>{len(st.session_state.log)}</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -391,14 +879,14 @@ with st.sidebar:
 if st.session_state.screen == "input":
 
     st.markdown("""
-    <h1 style='font-family:"Playfair Display",serif;font-size:2rem;
-               margin-bottom:0.2rem;'>
-        Reading Comprehension Quiz
-    </h1>
-    <p style='color:#8b949e;font-size:14px;margin-bottom:1.5rem;'>
-        Paste a passage or load a random RACE sample — the AI will generate a
-        quiz question, distractors, and graduated hints automatically.
-    </p>
+    <div class="ph-wrap">
+        <div class="ph-eyebrow">Step 1</div>
+        <h1 class="ph-title">Reading <span>Passage</span></h1>
+        <p class="ph-sub">
+            Paste any article or load a random sample from the RACE dataset —
+            the pipeline will generate a question, distractors and graduated hints.
+        </p>
+    </div>
     """, unsafe_allow_html=True)
 
     # ── Random sample loader ────────────────────────────────────────────────
@@ -408,85 +896,117 @@ if st.session_state.screen == "input":
             "Dataset split",
             ["val", "train", "test"],
             label_visibility="collapsed",
+            key="split_select",
         )
     with col_r:
-        if st.button("🎲  Load Random RACE Sample", use_container_width=True):
-            try:
-                from src.inference import random_race_sample
-                with st.spinner("Loading sample…"):
-                    sample = random_race_sample(split_choice)
-                st.session_state.article     = sample["article"]
-                st.session_state.question    = sample["question"]
-                st.session_state.options     = sample["options"]
-                st.session_state.gold_answer = sample["answer"]
-                st.session_state.correct_answer_text = sample["options"][sample["answer"]]
-                # Reset downstream state
-                st.session_state.quiz_checked     = False
-                st.session_state.selected_option  = None
-                st.session_state.predict_result   = None
-                st.session_state.hints            = []
-                st.session_state.hints_revealed   = 0
-                st.session_state.answer_revealed  = False
-                st.session_state.distractors      = []
-                st.success("Sample loaded!")
-                _log("load_sample", extra={"split": split_choice})
-            except FileNotFoundError:
-                st.error("RACE CSV not found. Place files in data/raw/ and reload.")
-            except Exception as exc:
-                st.error(f"Error loading sample: {exc}")
+        load_btn = st.button(
+            "🎲  Load Random RACE Sample",
+            use_container_width=True,
+            key="load_sample_btn",
+        )
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+    if load_btn:
+        _show_loading("Loading passage from RACE dataset")
+        try:
+            from src.inference import random_race_sample
+            sample = random_race_sample(split_choice)
+
+            # ── CRITICAL: reset all quiz state BEFORE setting new content ──
+            _reset_quiz_state()
+
+            st.session_state.article              = sample["article"]
+            st.session_state.question             = sample["question"]
+            st.session_state.options              = sample["options"]
+            st.session_state.gold_answer          = sample["answer"]
+            st.session_state.correct_answer_text  = sample["options"][sample["answer"]]
+
+            _log("load_sample", extra={"split": split_choice})
+            st.rerun()
+
+        except FileNotFoundError:
+            st.error("RACE CSV not found. Place files in data/raw/ and reload.")
+        except Exception as exc:
+            st.error(f"Error loading sample: {exc}")
+
+    st.markdown('<div class="hr-glow"></div>', unsafe_allow_html=True)
 
     # ── Article text area ───────────────────────────────────────────────────
-    st.markdown('<div class="section-title">📖 Reading Passage</div>',
-                unsafe_allow_html=True)
+    st.markdown('<div class="slabel">📖 Reading Passage</div>', unsafe_allow_html=True)
+
+    # Key tied to passage_version → widget is completely recreated on new passage
     article_input = st.text_area(
         "Paste your article here",
         value=st.session_state.article,
-        height=220,
+        height=230,
         placeholder="Paste a reading passage here, or load a random RACE sample above…",
         label_visibility="collapsed",
+        key=f"article_area_{st.session_state.passage_version}",
     )
-    st.session_state.article = article_input
+    # Only reset downstream if user manually edits
+    if article_input != st.session_state.article:
+        st.session_state.article = article_input
+        _reset_quiz_state()
+    else:
+        st.session_state.article = article_input
 
-    # ── Question (optional override) ────────────────────────────────────────
-    with st.expander("✏️  Custom question (optional — leave blank to auto-generate)", expanded=False):
+    # ── Custom question override ────────────────────────────────────────────
+    with st.expander(
+        "✏️  Custom question  (optional — leave blank to auto-generate)",
+        expanded=False,
+    ):
         q_input = st.text_input(
             "Question",
             value=st.session_state.question,
             placeholder="What did the protagonist decide to do?",
             label_visibility="collapsed",
+            key=f"q_input_{st.session_state.passage_version}",
         )
         st.session_state.question = q_input
 
-        # Manual options (only shown if question is filled)
         if q_input.strip():
             st.markdown("**Answer options** (leave blank to auto-generate)")
             c1, c2 = st.columns(2)
             with c1:
-                a_in = st.text_input("A", value=st.session_state.options.get("A",""), key="opt_A")
-                c_in = st.text_input("C", value=st.session_state.options.get("C",""), key="opt_C")
+                a_in = st.text_input(
+                    "A", value=st.session_state.options.get("A", ""),
+                    key=f"opt_A_{st.session_state.passage_version}",
+                )
+                c_in = st.text_input(
+                    "C", value=st.session_state.options.get("C", ""),
+                    key=f"opt_C_{st.session_state.passage_version}",
+                )
             with c2:
-                b_in = st.text_input("B", value=st.session_state.options.get("B",""), key="opt_B")
-                d_in = st.text_input("D", value=st.session_state.options.get("D",""), key="opt_D")
+                b_in = st.text_input(
+                    "B", value=st.session_state.options.get("B", ""),
+                    key=f"opt_B_{st.session_state.passage_version}",
+                )
+                d_in = st.text_input(
+                    "D", value=st.session_state.options.get("D", ""),
+                    key=f"opt_D_{st.session_state.passage_version}",
+                )
             if any([a_in, b_in, c_in, d_in]):
-                st.session_state.options = {"A": a_in, "B": b_in, "C": c_in, "D": d_in}
+                st.session_state.options = {
+                    "A": a_in, "B": b_in, "C": c_in, "D": d_in,
+                }
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<div class="hr-glow"></div>', unsafe_allow_html=True)
 
-    # ── Submit button ───────────────────────────────────────────────────────
+    # ── Submit ──────────────────────────────────────────────────────────────
     submit_col, _ = st.columns([1, 3])
     with submit_col:
-        submit = st.button("🚀  Generate Quiz", use_container_width=True)
+        submit = st.button(
+            "🚀  Generate Quiz",
+            use_container_width=True,
+            key="generate_quiz_btn",
+        )
 
     if submit:
         if not st.session_state.article.strip():
             st.warning("Please paste an article or load a RACE sample first.")
         elif not ready:
-            st.error(
-                f"Pipeline not ready — train your models first.\n\n{pipeline_err or ''}"
-            )
+            st.error(f"Pipeline not ready — train your models first.\n\n{pipeline_err or ''}")
         else:
+            _show_loading("Generating quiz · running inference")
             with st.spinner("Running Model A & B inference…"):
                 try:
                     from src.inference import (
@@ -495,24 +1015,18 @@ if st.session_state.screen == "input":
                     article  = st.session_state.article
                     question = st.session_state.question
 
-                    # ── Auto-generate question if not provided ──────────────
                     if not question.strip():
-                        # Template-based generation (spec §6.4)
                         from src.inference import _split_sentences, _clean, _tokenize
                         sentences = _split_sentences(article)
                         if sentences:
-                            # pick sentence with highest token count as stem
                             best = max(sentences, key=lambda s: len(_tokenize(s)))
                             question = f"What is the main idea described in: '{best[:80]}…'?"
                         else:
                             question = "What is the main idea of the passage?"
                         st.session_state.question = question
 
-                    # ── Options ─────────────────────────────────────────────
                     options = st.session_state.options
                     if not all(options.get(k, "").strip() for k in "ABCD"):
-                        # Need to build options from correct answer + distractors
-                        # First we need a correct answer candidate
                         from src.inference import _split_sentences
                         sents = _split_sentences(article)
                         correct_cand = sents[0][:100] if sents else article[:100]
@@ -527,15 +1041,13 @@ if st.session_state.screen == "input":
                         _random.shuffle(all_opts)
                         keys = ["A", "B", "C", "D"]
                         options = {keys[i]: all_opts[i] for i in range(4)}
-                        # Find which key has the correct answer
                         for k, v in options.items():
                             if v == correct_cand:
                                 st.session_state.gold_answer = k
                                 break
-                        st.session_state.options = options
+                        st.session_state.options    = options
                         st.session_state.distractors = dists
                     else:
-                        # Options already set (RACE sample)
                         correct_key  = st.session_state.gold_answer or "A"
                         correct_cand = options.get(correct_key, "")
                         t0 = time.perf_counter()
@@ -543,7 +1055,6 @@ if st.session_state.screen == "input":
                         dist_latency = (time.perf_counter() - t0) * 1000
                         st.session_state.distractors = dists
 
-                    # ── Hints ────────────────────────────────────────────────
                     correct_text = st.session_state.correct_answer_text or options.get(
                         st.session_state.gold_answer or "A", ""
                     )
@@ -558,9 +1069,11 @@ if st.session_state.screen == "input":
                     st.session_state.selected_option = None
                     st.session_state.predict_result  = None
 
-                    _log("generate_quiz",
-                         latency_ms=dist_latency + hint_latency,
-                         extra={"question_len": len(question)})
+                    _log(
+                        "generate_quiz",
+                        latency_ms=dist_latency + hint_latency,
+                        extra={"question_len": len(question)},
+                    )
 
                     st.session_state.screen = "quiz"
                     st.rerun()
@@ -569,6 +1082,25 @@ if st.session_state.screen == "input":
                     st.error(f"Inference error: {exc}")
                     with st.expander("Traceback"):
                         st.code(traceback.format_exc())
+
+    # ── Passage preview ─────────────────────────────────────────────────────
+    if st.session_state.article.strip():
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown('<div class="slabel">👁  Passage Preview</div>',
+                    unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="art-box">{st.session_state.article}</div>',
+            unsafe_allow_html=True,
+        )
+        if st.session_state.question:
+            st.markdown(
+                f'<div class="gcard gcard-teal" style="margin-top:0.9rem;">'
+                f'<div class="slabel">❓ Loaded Question</div>'
+                f'<p style="font-size:1rem;margin:0;color:var(--text2);line-height:1.65;">'
+                f'{st.session_state.question}</p>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
 
 # ===========================================================================
@@ -579,45 +1111,55 @@ elif st.session_state.screen == "quiz":
 
     if not st.session_state.article.strip():
         st.warning("No article loaded. Go to **Article Input** first.")
+        if st.button("← Go to Article Input"):
+            st.session_state.screen = "input"
+            st.rerun()
         st.stop()
 
     st.markdown("""
-    <h1 style='font-family:"Playfair Display",serif;font-size:1.8rem;
-               margin-bottom:0.2rem;'>
-        Quiz
-    </h1>
+    <div class="ph-wrap">
+        <div class="ph-eyebrow">Step 2</div>
+        <h1 class="ph-title">Answer the <span>Question</span></h1>
+    </div>
     """, unsafe_allow_html=True)
 
-    # ── Article display ─────────────────────────────────────────────────────
+    # ── Article (collapsible) ───────────────────────────────────────────────
     with st.expander("📖  Reading Passage", expanded=False):
         st.markdown(
-            f'<div class="article-box">{st.session_state.article}</div>',
+            f'<div class="art-box">{st.session_state.article}</div>',
             unsafe_allow_html=True,
         )
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<div class="hr-glow"></div>', unsafe_allow_html=True)
 
-    # ── Question ─────────────────────────────────────────────────────────────
+    # ── Question card ───────────────────────────────────────────────────────
     st.markdown(
-        f'<div class="card card-accent">'
-        f'<div class="section-title">❓ Question</div>'
-        f'<p style="font-size:1.05rem;line-height:1.6;margin:0;">'
+        f'<div class="gcard gcard-teal">'
+        f'<div class="slabel">❓ Question</div>'
+        f'<p style="font-size:1.12rem;line-height:1.7;margin:0;font-weight:500;'
+        f'color:var(--text);">'
         f'{st.session_state.question}</p></div>',
         unsafe_allow_html=True,
     )
 
-    # ── Option selection ─────────────────────────────────────────────────────
+    # ── Options ─────────────────────────────────────────────────────────────
     options = st.session_state.options
     if not options:
-        st.error("No options available. Please go back to Article Input.")
+        st.error("No options available. Please go back to Article Input and generate a quiz.")
+        if st.button("← Back to Article Input"):
+            st.session_state.screen = "input"
+            st.rerun()
         st.stop()
 
-    st.markdown('<div class="section-title">📋 Choose an Answer</div>',
-                unsafe_allow_html=True)
+    st.markdown(
+        '<div class="slabel" style="margin-top:1rem;">📋 Choose Your Answer</div>',
+        unsafe_allow_html=True,
+    )
 
-    checked   = st.session_state.quiz_checked
-    selected  = st.session_state.selected_option
-    gold      = st.session_state.gold_answer
+    checked  = st.session_state.quiz_checked
+    selected = st.session_state.selected_option
+    gold     = st.session_state.gold_answer
+    pv       = st.session_state.passage_version  # for unique widget keys
 
     for key in ["A", "B", "C", "D"]:
         opt_text = options.get(key, "")
@@ -626,172 +1168,220 @@ elif st.session_state.screen == "quiz":
 
         if checked:
             if key == gold:
-                css = "correct"
-                prefix = "✅"
+                btn_cls  = "opt-correct-btn"
+                prefix   = "✓"
             elif key == selected and key != gold:
-                css = "wrong"
-                prefix = "❌"
+                btn_cls  = "opt-wrong-btn"
+                prefix   = "✗"
             else:
-                css = ""
-                prefix = ""
-            label = f"{prefix} **{key}.** {opt_text}"
+                btn_cls  = "opt-neutral-btn"
+                prefix   = key
         else:
-            css    = "selected" if key == selected else ""
-            label  = f"**{key}.** {opt_text}"
+            btn_cls  = "opt-selected-btn" if key == selected else "opt-default-btn"
+            prefix   = key
+
+        # Inject per-button CSS class via a container ID trick
+        st.markdown(
+            f'<style>'
+            f'div[data-testid="stButton"] > button[kind="secondary"]'
+            f'#opt_{pv}_{key} {{ display:none; }}'
+            f'</style>'
+            f'<div class="opt-btn-wrap {btn_cls}" id="opt_wrap_{pv}_{key}"></div>',
+            unsafe_allow_html=True,
+        )
 
         col_btn, _ = st.columns([6, 1])
         with col_btn:
             if st.button(
-                f"{key}.  {opt_text}",
-                key=f"opt_btn_{key}",
+                f"{prefix}  ·  {opt_text}",
+                key=f"opt_btn_{pv}_{key}",
                 use_container_width=True,
                 disabled=checked,
             ):
                 st.session_state.selected_option = key
                 st.rerun()
 
-    # Highlight selection feedback
+    # Selection confirmation strip
     if selected and not checked:
         st.markdown(
-            f'<div class="card" style="margin-top:0.5rem;">'
-            f'Selected: <strong>{selected}</strong> — {options.get(selected,"")}</div>',
+            f'<div class="gcard" style="padding:0.75rem 1.2rem;margin-top:0.4rem;">'
+            f'<span style="color:var(--dim);font-size:12.5px;font-family:\'Syne\',sans-serif;">'
+            f'SELECTED &nbsp;·&nbsp; </span>'
+            f'<strong style="color:var(--teal);font-family:\'JetBrains Mono\',monospace;">'
+            f'{selected}</strong>'
+            f'<span style="color:var(--text2);font-size:13px;"> — {options.get(selected,"")}</span>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<div class="hr-glow"></div>', unsafe_allow_html=True)
 
-    # ── Check button ─────────────────────────────────────────────────────────
-    col_check, col_hint, col_reset = st.columns([2, 2, 2])
+    # ── Action row ────────────────────────────────────────────────────────────
+    col_check, col_hint, col_reset = st.columns(3)
 
     with col_check:
         if not checked:
-            if st.button("✔️  Check Answer", use_container_width=True,
-                         disabled=selected is None):
-                if selected is None:
-                    st.warning("Select an option first.")
+            check_clicked = st.button(
+                "✔  Check Answer",
+                use_container_width=True,
+                disabled=(selected is None),
+                key=f"check_btn_{pv}",
+            )
+            if check_clicked:
+                ready2, pipeline2, _ = _pipeline_ready()
+                if not ready2:
+                    st.error("Pipeline not ready.")
                 else:
-                    ready, pipeline, _ = _pipeline_ready()
-                    if not ready:
-                        st.error("Pipeline not ready.")
-                    else:
-                        with st.spinner("Verifying…"):
-                            from src.inference import predict_answer
-                            t0  = time.perf_counter()
-                            res = predict_answer(
-                                st.session_state.article,
-                                st.session_state.question,
-                                st.session_state.options,
-                            )
-                            lat = (time.perf_counter() - t0) * 1000
-
-                        # supporting sentence
-                        supp = ""
-                        if ready and pipeline:
-                            supp = pipeline.supporting_sentence(
-                                st.session_state.article,
-                                st.session_state.correct_answer_text
-                                or options.get(gold or "A", ""),
-                            )
-
-                        st.session_state.predict_result  = res
-                        st.session_state.quiz_checked    = True
-                        st.session_state.supporting_sent = supp
-
-                        is_correct = selected == gold
-                        _log(
-                            "check_answer",
-                            latency_ms=lat,
-                            extra={
-                                "selected": selected,
-                                "gold": gold,
-                                "correct": is_correct,
-                                "model_predicted": res.get("predicted"),
-                                "confidence": res.get("confidence"),
-                            },
+                    _show_loading("Verifying answer")
+                    with st.spinner("Verifying…"):
+                        from src.inference import predict_answer
+                        t0  = time.perf_counter()
+                        res = predict_answer(
+                            st.session_state.article,
+                            st.session_state.question,
+                            st.session_state.options,
                         )
-                        st.rerun()
+                        lat = (time.perf_counter() - t0) * 1000
+
+                    supp = ""
+                    if ready2 and pipeline2:
+                        supp = pipeline2.supporting_sentence(
+                            st.session_state.article,
+                            st.session_state.correct_answer_text
+                            or options.get(gold or "A", ""),
+                        )
+
+                    st.session_state.predict_result  = res
+                    st.session_state.quiz_checked    = True
+                    st.session_state.supporting_sent = supp
+
+                    is_correct = (selected == gold)
+                    _log(
+                        "check_answer",
+                        latency_ms=lat,
+                        extra={
+                            "selected":        selected,
+                            "gold":            gold,
+                            "correct":         is_correct,
+                            "model_predicted": res.get("predicted"),
+                            "confidence":      res.get("confidence"),
+                        },
+                    )
+                    st.rerun()
 
     with col_hint:
-        if st.button("💡  Get a Hint", use_container_width=True):
+        if st.button("💡  Get a Hint", use_container_width=True,
+                     key=f"hint_btn_{pv}"):
             st.session_state.screen = "hints"
             st.rerun()
 
     with col_reset:
-        if st.button("🔄  New Question", use_container_width=True):
+        if st.button("🔄  New Question", use_container_width=True,
+                     key=f"reset_btn_{pv}"):
             st.session_state.screen = "input"
             st.rerun()
 
     # ── Result display ────────────────────────────────────────────────────────
     if checked and st.session_state.predict_result:
-        res       = st.session_state.predict_result
-        is_correct = selected == gold
-        supp      = st.session_state.supporting_sent
+        res        = st.session_state.predict_result
+        is_correct = (selected == gold)
+        supp       = st.session_state.supporting_sent
+
+        st.markdown("<br>", unsafe_allow_html=True)
 
         if is_correct:
             st.markdown(
-                f'<div class="card card-green" style="margin-top:1rem;">'
-                f'<div style="font-size:1.3rem;font-weight:700;color:#3fb950;">'
+                f'<div class="gcard gcard-emerald">'
+                f'<div style="font-family:\'Fraunces\',serif;font-size:1.5rem;'
+                f'font-weight:700;color:#4ade80;letter-spacing:-0.02em;">'
                 f'🎉 Correct!</div>'
-                f'<p style="margin:0.5rem 0 0 0;color:#8b949e;font-size:13px;">'
-                f'Confidence: {res.get("confidence", 0):.0%} &nbsp;·&nbsp; '
-                f'Latency: {res.get("latency_ms",0):.0f} ms</p>'
-                f'</div>',
+                f'<div style="margin-top:0.5rem;display:flex;gap:1rem;'
+                f'font-family:\'JetBrains Mono\',monospace;font-size:12px;color:var(--dim);">'
+                f'<span>CONFIDENCE &nbsp;<strong style="color:var(--mint);">'
+                f'{res.get("confidence", 0):.0%}</strong></span>'
+                f'<span>LATENCY &nbsp;<strong style="color:var(--mint);">'
+                f'{res.get("latency_ms",0):.0f} ms</strong></span>'
+                f'</div></div>',
                 unsafe_allow_html=True,
             )
         else:
             st.markdown(
-                f'<div class="card card-red" style="margin-top:1rem;">'
-                f'<div style="font-size:1.3rem;font-weight:700;color:#f85149;">'
+                f'<div class="gcard gcard-coral">'
+                f'<div style="font-family:\'Fraunces\',serif;font-size:1.5rem;'
+                f'font-weight:700;color:var(--coral);letter-spacing:-0.02em;">'
                 f'✗ Incorrect</div>'
-                f'<p style="margin:0.3rem 0 0 0;">The correct answer was '
-                f'<strong>{gold}</strong>: {options.get(gold,"")}</p>'
-                f'<p style="margin:0.2rem 0 0 0;color:#8b949e;font-size:13px;">'
-                f'Model predicted: <strong>{res.get("predicted")}</strong> '
-                f'(confidence {res.get("confidence",0):.0%})</p>'
+                f'<p style="margin:0.5rem 0 0;color:var(--text2);font-size:14px;">'
+                f'The correct answer was '
+                f'<strong style="color:var(--teal);font-family:\'JetBrains Mono\',monospace;">'
+                f'{gold}</strong> — {options.get(gold,"")}</p>'
+                f'<div style="margin-top:0.5rem;font-family:\'JetBrains Mono\',monospace;'
+                f'font-size:11.5px;color:var(--dim);">'
+                f'MODEL PREDICTED &nbsp;<strong style="color:var(--text2);">'
+                f'{res.get("predicted")}</strong>'
+                f'&nbsp;·&nbsp; CONFIDENCE &nbsp;<strong style="color:var(--text2);">'
+                f'{res.get("confidence",0):.0%}</strong></div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
 
         if supp:
             st.markdown(
-                f'<div class="card card-blue" style="margin-top:0.6rem;">'
-                f'<div class="section-title" style="font-size:0.9rem;">📌 Supporting Evidence</div>'
-                f'<p style="font-size:13px;line-height:1.65;margin:0;font-style:italic;">'
-                f'"{supp}"</p></div>',
+                f'<div class="gcard gcard-sky">'
+                f'<div class="slabel">📌 Supporting Evidence</div>'
+                f'<p style="font-size:13.5px;line-height:1.75;margin:0;'
+                f'font-style:italic;color:var(--text2);">"{supp}"</p>'
+                f'</div>',
                 unsafe_allow_html=True,
             )
 
-        # All four option scores bar chart
+        # Score bar chart
         scores = res.get("scores", {})
         if scores:
+            bar_colors = []
+            for k in scores:
+                if k == gold:
+                    bar_colors.append("#10b981")
+                elif k == selected and k != gold:
+                    bar_colors.append("#fb7185")
+                else:
+                    bar_colors.append("rgba(45,212,191,0.25)")
+
             fig = go.Figure(go.Bar(
                 x=list(scores.keys()),
                 y=list(scores.values()),
-                marker_color=[
-                    "#3fb950" if k == gold else
-                    "#f85149" if k == selected and k != gold else
-                    "#58a6ff"
-                    for k in scores
-                ],
+                marker_color=bar_colors,
                 text=[f"{v:.0%}" for v in scores.values()],
                 textposition="outside",
+                textfont=dict(family="JetBrains Mono", size=12, color="#5eead4"),
+                marker_line_width=0,
             ))
             fig.update_layout(
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                font_color="#e6edf3",
-                margin=dict(t=10, b=10, l=10, r=10),
-                height=220,
-                yaxis=dict(range=[0, 1.1], gridcolor="#30363d", tickformat=".0%"),
-                xaxis=dict(tickfont=dict(size=14, family="DM Mono")),
+                font_color="#5eead4",
+                font_family="Syne",
+                margin=dict(t=24, b=8, l=8, r=8),
+                height=210,
+                yaxis=dict(
+                    range=[0, 1.2],
+                    gridcolor="rgba(45,212,191,0.08)",
+                    tickformat=".0%",
+                    tickfont=dict(size=11, family="JetBrains Mono"),
+                    zeroline=False,
+                ),
+                xaxis=dict(
+                    tickfont=dict(size=15, family="JetBrains Mono", color="#99f6e4"),
+                    ticklabelposition="outside",
+                ),
                 showlegend=False,
+                bargap=0.38,
             )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig, use_container_width=True,
+                            config={"displayModeBar": False})
 
-        # AI disclaimer (spec §15.2)
         st.markdown(
-            '<p style="font-size:11px;color:#8b949e;margin-top:0.5rem;">'
-            '⚠️ Answers and distractors are AI-generated. Errors are possible. '
+            '<p style="font-size:11px;color:var(--dim);margin-top:0.4rem;">'
+            '⚠ Answers and distractors are AI-generated. '
             'Not suitable for real exam use without expert review.</p>',
             unsafe_allow_html=True,
         )
@@ -808,21 +1398,23 @@ elif st.session_state.screen == "hints":
         st.stop()
 
     st.markdown("""
-    <h1 style='font-family:"Playfair Display",serif;font-size:1.8rem;
-               margin-bottom:0.2rem;'>
-        Hint Panel
-    </h1>
-    <p style='color:#8b949e;font-size:14px;margin-bottom:1.2rem;'>
-        Hints go from broad context clues to near-explicit guidance.
-        Use them wisely before revealing the answer.
-    </p>
+    <div class="ph-wrap">
+        <div class="ph-eyebrow">Step 3</div>
+        <h1 class="ph-title">Hint <span>Panel</span></h1>
+        <p class="ph-sub">
+            Hints progress from broad context clues to near-explicit guidance.
+            Use them wisely before revealing the answer.
+        </p>
+    </div>
     """, unsafe_allow_html=True)
 
-    # Show question
+    # Question recap
     st.markdown(
-        f'<div class="card card-accent">'
-        f'<div class="section-title">❓ Question</div>'
-        f'<p style="font-size:1rem;margin:0;">{st.session_state.question}</p>'
+        f'<div class="gcard gcard-teal">'
+        f'<div class="slabel">❓ Question</div>'
+        f'<p style="font-size:1.05rem;margin:0;font-weight:500;'
+        f'color:var(--text);line-height:1.65;">'
+        f'{st.session_state.question}</p>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -831,57 +1423,70 @@ elif st.session_state.screen == "hints":
     if not hints:
         st.info("No hints generated yet. Submit an article first.")
     else:
-        hint_labels = [
-            ("Hint 1 — General Context",     "🔵", "#58a6ff"),
-            ("Hint 2 — Narrowed Focus",      "🟡", "#e6a817"),
-            ("Hint 3 — Near-Explicit Clue",  "🟠", "#f0883e"),
+        hint_meta = [
+            ("Hint 1",  "General Context",    "#67e8f9", "rgba(103,232,249,0.14)"),
+            ("Hint 2",  "Narrowed Focus",     "#2dd4bf", "rgba(45,212,191,0.14)"),
+            ("Hint 3",  "Near-Explicit Clue", "#f59e0b", "rgba(245,158,11,0.14)"),
         ]
-
         n_revealed = st.session_state.hints_revealed
 
         for i, hint in enumerate(hints[:3]):
-            label, icon, color = hint_labels[i] if i < len(hint_labels) else (f"Hint {i+1}", "●", "#58a6ff")
+            if i < len(hint_meta):
+                num, desc, border_col, badge_bg = hint_meta[i]
+            else:
+                num, desc, border_col, badge_bg = f"Hint {i+1}", "", "#5eead4", "rgba(94,234,212,0.1)"
 
             if i < n_revealed:
                 st.markdown(
-                    f'<div class="hint-card" style="border-left-color:{color};">'
-                    f'<div class="hint-badge" style="background:{color};">{label}</div><br>'
-                    f'{hint}'
+                    f'<div class="hcard" style="border-left-color:{border_col};">'
+                    f'<div class="hbadge" style="background:{badge_bg};'
+                    f'color:{border_col};border-color:{border_col}55;">'
+                    f'{num} &mdash; {desc}</div><br>'
+                    f'<span style="color:var(--text2);">{hint}</span>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
             else:
                 st.markdown(
-                    f'<div class="hint-card" style="border-left-color:#30363d;'
-                    f'opacity:0.35;filter:blur(2px);">'
-                    f'<div class="hint-badge" style="background:#30363d;color:#8b949e;">'
-                    f'{label}</div><br>{'▓' * 60}'
+                    f'<div class="hcard-locked">'
+                    f'<div style="background:rgba(45,212,191,0.06);color:var(--dim);'
+                    f'font-size:10px;font-weight:700;border-radius:5px;padding:3px 10px;'
+                    f'display:inline-block;text-transform:uppercase;letter-spacing:0.12em;'
+                    f'margin-bottom:0.5rem;">{num} &mdash; {desc}</div><br>'
+                    f'<span style="color:var(--dim);">{"▓" * 55}</span>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
 
         st.markdown("<br>", unsafe_allow_html=True)
+        col_reveal, col_back = st.columns(2)
 
-        col_reveal_hint, col_back = st.columns([2, 2])
-        with col_reveal_hint:
+        with col_reveal:
             if n_revealed < len(hints):
-                next_label = hint_labels[n_revealed][0] if n_revealed < len(hint_labels) else f"Hint {n_revealed+1}"
-                if st.button(f"💡  Reveal {next_label}", use_container_width=True):
+                next_num  = hint_meta[n_revealed][0] if n_revealed < len(hint_meta) else f"Hint {n_revealed+1}"
+                next_desc = hint_meta[n_revealed][1] if n_revealed < len(hint_meta) else ""
+                if st.button(f"💡  Reveal {next_num}", use_container_width=True):
                     st.session_state.hints_revealed += 1
-                    _log("reveal_hint", extra={"hint_number": st.session_state.hints_revealed})
+                    _log("reveal_hint",
+                         extra={"hint_number": st.session_state.hints_revealed})
                     st.rerun()
             else:
                 st.markdown(
-                    '<span class="badge badge-gold">All hints revealed</span>',
+                    '<span class="badge bg-emerald">✓ All hints revealed</span>',
                     unsafe_allow_html=True,
                 )
 
-        # Reveal Answer — only after ALL hints shown (spec §9.2)
+        with col_back:
+            if st.button("← Back to Quiz", use_container_width=True):
+                st.session_state.screen = "quiz"
+                st.rerun()
+
+        # Reveal answer — only after all hints used
         if n_revealed >= len(hints) and not st.session_state.answer_revealed:
-            st.markdown("<hr>", unsafe_allow_html=True)
+            st.markdown('<div class="hr-glow"></div>', unsafe_allow_html=True)
             st.markdown(
-                '<p style="font-size:13px;color:#8b949e;">'
-                'You have used all hints. You may now reveal the answer.</p>',
+                '<p style="font-size:13px;color:var(--dim);">'
+                'All hints have been used. You may now reveal the correct answer.</p>',
                 unsafe_allow_html=True,
             )
             if st.button("🔓  Reveal Answer", use_container_width=True):
@@ -894,18 +1499,17 @@ elif st.session_state.screen == "hints":
             opts = st.session_state.options
             correct_text = opts.get(gold, st.session_state.correct_answer_text)
             st.markdown(
-                f'<div class="card card-green" style="margin-top:1rem;">'
-                f'<div style="font-size:1.1rem;font-weight:700;color:#3fb950;">'
-                f'✅ Correct Answer: {gold}</div>'
-                f'<p style="margin:0.4rem 0 0 0;">{correct_text}</p>'
+                f'<div class="gcard gcard-emerald" style="margin-top:1rem;">'
+                f'<div style="font-family:\'Fraunces\',serif;font-size:1.3rem;'
+                f'font-weight:700;color:#4ade80;letter-spacing:-0.02em;">'
+                f'✅ Correct Answer: '
+                f'<span style="font-family:\'JetBrains Mono\',monospace;">{gold}</span>'
+                f'</div>'
+                f'<p style="margin:0.55rem 0 0;color:var(--text2);font-size:14px;">'
+                f'{correct_text}</p>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
-
-        with col_back:
-            if st.button("← Back to Quiz", use_container_width=True):
-                st.session_state.screen = "quiz"
-                st.rerun()
 
 
 # ===========================================================================
@@ -915,19 +1519,19 @@ elif st.session_state.screen == "hints":
 elif st.session_state.screen == "dashboard":
 
     st.markdown("""
-    <h1 style='font-family:"Playfair Display",serif;font-size:1.8rem;
-               margin-bottom:0.2rem;'>
-        Analytics Dashboard
-    </h1>
-    <p style='color:#8b949e;font-size:14px;margin-bottom:1.2rem;'>
-        Live performance metrics for Model A (answer verification) and
-        Model B (distractor &amp; hint generation) across this session.
-    </p>
+    <div class="ph-wrap">
+        <div class="ph-eyebrow">Developer View</div>
+        <h1 class="ph-title">Analytics <span>Dashboard</span></h1>
+        <p class="ph-sub">
+            Live performance metrics for Model A (answer verification) and
+            Model B (distractor &amp; hint generation) across this session.
+        </p>
+    </div>
     """, unsafe_allow_html=True)
 
     log = st.session_state.log
 
-    # ── Session summary ───────────────────────────────────────────────────────
+    # ── Session summary metrics ───────────────────────────────────────────────
     check_events = [e for e in log if e["event"] == "check_answer"]
     n_total   = len(check_events)
     n_correct = sum(1 for e in check_events if e.get("correct"))
@@ -937,28 +1541,29 @@ elif st.session_state.screen == "dashboard":
 
     col1, col2, col3, col4 = st.columns(4)
     for col, val, lbl in [
-        (col1, n_total,            "Quizzes Taken"),
-        (col2, f"{accuracy:.0%}", "Session Accuracy"),
-        (col3, f"{avg_lat:.0f}ms","Avg Latency"),
-        (col4, n_hints,            "Hints Used"),
+        (col1, n_total,             "Quizzes Taken"),
+        (col2, f"{accuracy:.0%}",  "Session Accuracy"),
+        (col3, f"{avg_lat:.0f}ms", "Avg Latency"),
+        (col4, n_hints,             "Hints Used"),
     ]:
         with col:
             st.markdown(
-                f'<div class="metric-box">'
-                f'<div class="metric-val">{val}</div>'
-                f'<div class="metric-lbl">{lbl}</div>'
-                f'</div>',
+                f'<div class="mbox"><div class="mv">{val}</div>'
+                f'<div class="ml">{lbl}</div></div>',
                 unsafe_allow_html=True,
             )
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<div class="hr-glow" style="margin-top:1.4rem;"></div>',
+                unsafe_allow_html=True)
 
-    # ── Model A metrics ───────────────────────────────────────────────────────
-    st.markdown("### 🤖 Model A — Answer Verification")
+    # ── Model A ───────────────────────────────────────────────────────────────
+    st.markdown(
+        '<div class="slabel" style="font-size:11px;">🤖 Model A — Answer Verification</div>',
+        unsafe_allow_html=True,
+    )
 
     ready, pipeline, _ = _pipeline_ready()
     if ready and pipeline:
-        available = {}
         model_map = {
             "Logistic Regression": pipeline.lr_classifier,
             "SVM":                 pipeline.svm_classifier,
@@ -967,73 +1572,86 @@ elif st.session_state.screen == "dashboard":
             "XGBoost":             pipeline.xgb_classifier,
             "Ensemble":            pipeline.ensemble_model,
         }
-        for name, mdl in model_map.items():
-            if mdl is not None:
-                available[name] = "✅ Loaded"
-            else:
-                available[name] = "⬜ Not trained"
-
-        model_df = pd.DataFrame(
-            {"Model": list(available.keys()), "Status": list(available.values())}
-        )
+        model_df = pd.DataFrame({
+            "Model":  list(model_map.keys()),
+            "Status": ["✅ Loaded" if v is not None else "⬜ Not trained"
+                       for v in model_map.values()],
+        })
         st.dataframe(model_df, use_container_width=True, hide_index=True)
 
     if check_events:
-        # Confusion matrix from session log
-        tp = sum(1 for e in check_events if e.get("correct") and e.get("selected") == e.get("gold"))
-        fp = sum(1 for e in check_events if not e.get("correct") and e.get("model_predicted") != e.get("gold"))
-        fn = sum(1 for e in check_events if e.get("correct") and e.get("model_predicted") != e.get("selected"))
-        tn = n_total - tp - fp - fn
-        tn = max(tn, 0)
+        tp = sum(1 for e in check_events
+                 if e.get("correct") and e.get("selected") == e.get("gold"))
+        fp = sum(1 for e in check_events
+                 if not e.get("correct") and e.get("model_predicted") != e.get("gold"))
+        fn = sum(1 for e in check_events
+                 if e.get("correct") and e.get("model_predicted") != e.get("selected"))
+        tn = max(n_total - tp - fp - fn, 0)
 
         cm = np.array([[tp, fn], [fp, tn]])
         fig_cm = go.Figure(go.Heatmap(
             z=cm,
             x=["Predicted Correct", "Predicted Wrong"],
             y=["Actually Correct",  "Actually Wrong"],
-            colorscale=[[0,"#161b22"],[0.5,"#214a7a"],[1,"#58a6ff"]],
-            text=cm.astype(str), texttemplate="%{text}",
+            colorscale=[
+                [0,   "rgba(13,40,32,0.7)"],
+                [0.5, "rgba(20,184,166,0.3)"],
+                [1,   "#2dd4bf"],
+            ],
+            text=cm.astype(str),
+            texttemplate="%{text}",
+            textfont=dict(size=18, family="JetBrains Mono"),
             showscale=False,
         ))
         fig_cm.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            font_color="#e6edf3",
-            margin=dict(t=20, b=20, l=10, r=10),
+            font_color="#5eead4",
+            font_family="Syne",
+            margin=dict(t=24, b=24, l=12, r=12),
             height=240,
-            title="Session Confusion Matrix",
-            title_font=dict(size=13, family="DM Sans"),
+            title=dict(text="Session Confusion Matrix", font=dict(size=13)),
         )
         st.plotly_chart(fig_cm, use_container_width=True,
                         config={"displayModeBar": False})
 
-        # Confidence distribution
         confs = [e.get("confidence", 0) for e in check_events]
         if confs:
             fig_conf = go.Figure(go.Histogram(
-                x=confs, nbinsx=10,
-                marker_color="#e6a817", opacity=0.8,
+                x=confs,
+                nbinsx=10,
+                marker_color="#2dd4bf",
+                marker_line_color="rgba(0,0,0,0.3)",
+                marker_line_width=1,
+                opacity=0.75,
             ))
             fig_conf.update_layout(
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                font_color="#e6edf3",
-                xaxis=dict(title="Confidence", gridcolor="#30363d"),
-                yaxis=dict(title="Count",      gridcolor="#30363d"),
-                margin=dict(t=20, b=20, l=10, r=10),
-                height=220,
-                title="Confidence Distribution",
-                title_font=dict(size=13, family="DM Sans"),
+                font_color="#5eead4",
+                font_family="Syne",
+                xaxis=dict(
+                    title="Confidence",
+                    gridcolor="rgba(45,212,191,0.08)",
+                    tickformat=".0%",
+                ),
+                yaxis=dict(title="Count", gridcolor="rgba(45,212,191,0.08)"),
+                margin=dict(t=24, b=16, l=12, r=12),
+                height=210,
+                title=dict(text="Confidence Distribution", font=dict(size=13)),
             )
             st.plotly_chart(fig_conf, use_container_width=True,
                             config={"displayModeBar": False})
     else:
         st.info("No quiz events logged yet this session.")
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<div class="hr-glow"></div>', unsafe_allow_html=True)
 
-    # ── Model B metrics ───────────────────────────────────────────────────────
-    st.markdown("### 🎯 Model B — Distractor & Hint Generation")
+    # ── Model B ───────────────────────────────────────────────────────────────
+    st.markdown(
+        '<div class="slabel" style="font-size:11px;">🎯 Model B — Distractor & Hint Generation</div>',
+        unsafe_allow_html=True,
+    )
 
     if ready and pipeline:
         b_items = {
@@ -1055,60 +1673,80 @@ elif st.session_state.screen == "dashboard":
         fig_hints = go.Figure(go.Bar(
             x=[f"Hint {k}" for k in sorted(hc)],
             y=[hc[k] for k in sorted(hc)],
-            marker_color=["#58a6ff", "#e6a817", "#f0883e"][:len(hc)],
+            marker_color=["#67e8f9", "#2dd4bf", "#f59e0b"][:len(hc)],
             text=[str(hc[k]) for k in sorted(hc)],
             textposition="outside",
+            textfont=dict(family="JetBrains Mono", size=12, color="#5eead4"),
+            marker_line_width=0,
         ))
         fig_hints.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            font_color="#e6edf3",
-            margin=dict(t=20, b=20, l=10, r=10),
-            height=220,
-            yaxis=dict(gridcolor="#30363d"),
-            title="Hints Requested per Level",
-            title_font=dict(size=13, family="DM Sans"),
+            font_color="#5eead4",
+            font_family="Syne",
+            margin=dict(t=24, b=16, l=12, r=12),
+            height=210,
+            yaxis=dict(gridcolor="rgba(45,212,191,0.08)"),
+            title=dict(text="Hints Requested per Level", font=dict(size=13)),
+            bargap=0.4,
         )
         st.plotly_chart(fig_hints, use_container_width=True,
                         config={"displayModeBar": False})
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<div class="hr-glow"></div>', unsafe_allow_html=True)
 
-    # ── Inference latency chart ───────────────────────────────────────────────
-    st.markdown("### ⏱ Inference Latency (ms)")
+    # ── Latency chart ─────────────────────────────────────────────────────────
+    st.markdown(
+        '<div class="slabel" style="font-size:11px;">⏱ Inference Latency (ms)</div>',
+        unsafe_allow_html=True,
+    )
 
     latency_events = [e for e in log if e["latency_ms"] > 0]
     if latency_events:
-        fig_lat = go.Figure(go.Scatter(
-            x=list(range(1, len(latency_events)+1)),
+        fig_lat = go.Figure()
+        fig_lat.add_trace(go.Scatter(
+            x=list(range(1, len(latency_events) + 1)),
             y=[e["latency_ms"] for e in latency_events],
             mode="lines+markers",
-            line=dict(color="#e6a817", width=2),
-            marker=dict(size=6, color="#e6a817"),
+            line=dict(color="#2dd4bf", width=2),
+            marker=dict(
+                size=7,
+                color="#2dd4bf",
+                line=dict(color="#020d0b", width=2),
+            ),
+            fill="tozeroy",
+            fillcolor="rgba(45,212,191,0.05)",
             text=[e["event"] for e in latency_events],
             hovertemplate="%{text}<br>%{y:.0f} ms<extra></extra>",
         ))
-        # 10 s limit line
         fig_lat.add_hline(
-            y=10_000, line_dash="dot", line_color="#f85149",
-            annotation_text="10s limit", annotation_position="right",
+            y=10_000,
+            line_dash="dot",
+            line_color="#fb7185",
+            annotation_text="10 s limit",
+            annotation_position="right",
+            annotation_font_color="#fb7185",
         )
         fig_lat.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            font_color="#e6edf3",
-            xaxis=dict(title="Request #", gridcolor="#30363d"),
-            yaxis=dict(title="Latency (ms)", gridcolor="#30363d"),
-            margin=dict(t=10, b=10, l=10, r=10),
-            height=240,
+            font_color="#5eead4",
+            font_family="Syne",
+            xaxis=dict(title="Request #", gridcolor="rgba(45,212,191,0.08)"),
+            yaxis=dict(title="Latency (ms)", gridcolor="rgba(45,212,191,0.08)"),
+            margin=dict(t=12, b=12, l=12, r=12),
+            height=230,
         )
         st.plotly_chart(fig_lat, use_container_width=True,
                         config={"displayModeBar": False})
 
-    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown('<div class="hr-glow"></div>', unsafe_allow_html=True)
 
-    # ── Session log table + CSV export ───────────────────────────────────────
-    st.markdown("### 📋 Session Event Log")
+    # ── Session log ───────────────────────────────────────────────────────────
+    st.markdown(
+        '<div class="slabel" style="font-size:11px;">📋 Session Event Log</div>',
+        unsafe_allow_html=True,
+    )
 
     if log:
         df_log = pd.DataFrame(log)
@@ -1118,24 +1756,23 @@ elif st.session_state.screen == "dashboard":
         with col_exp:
             csv_data = df_log.to_csv(index=False).encode("utf-8")
             st.download_button(
-                "⬇️  Export Session Log (CSV)",
+                "⬇  Export Session Log (CSV)",
                 data=csv_data,
                 file_name=f"race_session_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv",
                 use_container_width=True,
             )
         with col_clr:
-            if st.button("🗑️  Clear Log", use_container_width=True):
+            if st.button("🗑  Clear Log", use_container_width=True):
                 st.session_state.log = []
                 st.rerun()
     else:
         st.info("No events logged yet. Take a quiz to see data here.")
 
-    # AI transparency notice (spec §15.2)
     st.markdown(
-        '<p style="font-size:11px;color:#8b949e;margin-top:1rem;">'
-        '⚠️ All questions, answers, distractors, and hints displayed in this '
-        'application are AI-generated. Results should be reviewed by a human '
-        'expert before use in any formal educational setting.</p>',
+        '<p style="font-size:11px;color:var(--dim);margin-top:1.2rem;">'
+        '⚠ All questions, answers, distractors, and hints are AI-generated. '
+        'Results should be reviewed by a human expert before use in any '
+        'formal educational setting.</p>',
         unsafe_allow_html=True,
     )
