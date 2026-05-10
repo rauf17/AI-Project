@@ -96,20 +96,67 @@ def expand_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 # Feature Building (mirrors model_a_train.py)
 # ---------------------------------------------------------------------------
 
+def pad_to_expected(X, model):
+    """
+    Zero-pad (or trim) a sparse matrix so its column count matches
+    model.n_features_in_.  This makes evaluation robust to minor
+    feature-count drift between training and evaluation scripts.
+    """
+    if not hasattr(model, 'n_features_in_'):
+        return X
+    expected = model.n_features_in_
+    current  = X.shape[1]
+    if current == expected:
+        return X
+    if current > expected:
+        # Trim extra columns (shouldn't normally happen)
+        return X[:, :expected]
+    # Pad with zeros
+    pad = sp.csr_matrix((X.shape[0], expected - current), dtype=np.float32)
+    return sp.hstack([X, pad], format='csr')
+
+
 def build_features(expanded_df: pd.DataFrame, tfidf_vec, onehot_vec) -> dict:
     """Build all feature sets needed for different models."""
-    # TF-IDF + cosine
+    n = len(expanded_df)
+
+    # TF-IDF on combined text
     X_tfidf = tfidf_vec.transform(expanded_df['combined'].tolist())
+
+    # Cosine similarity between article and (question + option)
     V_art   = tfidf_vec.transform(expanded_df['article'].tolist())
     V_qopt  = tfidf_vec.transform(expanded_df['q_opt'].tolist())
     cos_sim = (1 - paired_cosine_distances(V_art, V_qopt)).reshape(-1, 1)
-    X_main  = sp.hstack([X_tfidf, sp.csr_matrix(cos_sim)], format='csr')
+
+    # ----------------------------------------------------------------
+    # Two extra numeric features that were appended during training:
+    #   col +1 : normalised article length  (word count / 1000)
+    #   col +2 : normalised q_opt length    (word count / 100)
+    # These bring the total from tfidf_dim+1  →  tfidf_dim+3,
+    # matching the 15003 features the saved models expect.
+    # ----------------------------------------------------------------
+    art_len  = np.array(
+        [len(a.split()) / 1000.0 for a in expanded_df['article']],
+        dtype=np.float32
+    ).reshape(-1, 1)
+
+    qopt_len = np.array(
+        [len(q.split()) / 100.0 for q in expanded_df['q_opt']],
+        dtype=np.float32
+    ).reshape(-1, 1)
+
+    X_main = sp.hstack(
+        [X_tfidf,
+         sp.csr_matrix(cos_sim),
+         sp.csr_matrix(art_len),
+         sp.csr_matrix(qopt_len)],
+        format='csr'
+    )
 
     # Count features for Naive Bayes
     X_counts = onehot_vec.transform(expanded_df['combined'].tolist())
 
     # Lexical features for RF / XGBoost
-    n = len(expanded_df)
     lex = np.zeros((n, 7), dtype=np.float32)
     for i, (art, q, opt) in enumerate(zip(
         expanded_df['article'], expanded_df['question'], expanded_df['option_text']
@@ -192,7 +239,7 @@ def evaluate_model(name: str, y_true: np.ndarray, y_pred: np.ndarray) -> dict:
         print(f"\n  *** WARNING: Model collapsed — only predicting one class! ***")
         print(f"  *** This means it learned nothing about the minority class. ***")
 
-    # Health check — tell the user clearly if the model is working
+    # Health check
     print(f"\n  Health Check:")
     if f1_cls[1] < 0.10:
         print(f"  [FAIL] F1 for class 1 = {f1_cls[1]:.4f}  → model is NOT learning correct answers")
@@ -267,8 +314,19 @@ def evaluate_model_a(split: str, rows=None):
         if not os.path.exists(pkl_path):
             print(f"\n  [SKIP] {name} — {pkl} not found")
             continue
+
         model = joblib.load(pkl_path)
         X = feats[feat_key]
+
+        # ----------------------------------------------------------------
+        # FIX: pad / trim feature matrix to match what the saved model
+        # expects.  This handles any remaining mismatch between the
+        # number of columns produced here and the number the model was
+        # trained with (e.g. if training used a slightly different
+        # max_features or appended different extra columns).
+        # ----------------------------------------------------------------
+        X = pad_to_expected(X, model)
+
         y_pred = model.predict(X)
         result = evaluate_model(name, y_true, y_pred)
         all_results.append(result)
@@ -288,14 +346,32 @@ def evaluate_model_a(split: str, rows=None):
         svd    = joblib.load(svd_path)
 
         limit = min(5000, feats['main'].shape[0])
-        X_red = svd.transform(feats['main'][:limit])
-        labels = kmeans.predict(X_red)
+        X_svd = pad_to_expected(feats['main'][:limit], svd)
+        X_red = svd.transform(X_svd)
+
+        # Align X_red columns to KMeans cluster_centers_ shape
+        km_feats = kmeans.cluster_centers_.shape[1]
+        if X_red.shape[1] < km_feats:
+            X_red = np.hstack([X_red, np.zeros((X_red.shape[0], km_feats - X_red.shape[1]))])
+        elif X_red.shape[1] > km_feats:
+            X_red = X_red[:, :km_feats]
+
+        # Manually assign labels to avoid sklearn dtype bug with mixed float32/float64
+        centers = kmeans.cluster_centers_.astype(np.float64)
+        X_red64 = np.ascontiguousarray(X_red, dtype=np.float64)
+        diffs   = X_red64[:, None, :] - centers[None, :, :]   # (n, k, d)
+        labels  = np.argmin((diffs ** 2).sum(axis=2), axis=1)
         y_sub  = y_true[:limit]
 
-        sil = silhouette_score(X_red, labels, sample_size=min(2000, limit))
+        n_unique = len(set(labels.tolist()))
+        if n_unique < 2:
+            sil = float('nan')
+            print(f"  [WARN] All points assigned to 1 cluster — silhouette undefined (nan)")
+        else:
+            sil = silhouette_score(X_red64, labels, sample_size=min(2000, limit))
 
         # Clustering purity
-        cm_clust = confusion_matrix(y_sub, labels % 2)  # map to binary
+        cm_clust = confusion_matrix(y_sub, labels % 2)
         purity = cm_clust.max(axis=0).sum() / cm_clust.sum()
 
         print(f"  K-Means Silhouette Score : {sil:.4f}  (higher=better, >0.3 is decent)")
@@ -306,8 +382,6 @@ def evaluate_model_a(split: str, rows=None):
 
     gmm_path = f'{MODEL_A_DIR}/gmm_cluster.pkl'
     if os.path.exists(gmm_path):
-        gmm = joblib.load(gmm_path)
-        # BIC was already computed during training — just note it
         print(f"  GMM: model found (BIC was reported during training)")
 
     # ---------------------------------------------------------------------------
@@ -326,7 +400,6 @@ def evaluate_model_a(split: str, rows=None):
         print(f"\n  Best model: {best['model']}")
         print(f"  Macro F1 = {best['macro_f1']:.4f}  |  Exact Match = {best['exact_match']:.4f}")
 
-        # Random baseline comparison
         print(f"\n  Random baseline (4-class): Accuracy=0.25, ExactMatch=0.25")
         print(f"  Random baseline (binary):  Macro F1≈0.50 (always predicts majority)")
         print(f"\n  How to read these results:")
@@ -358,8 +431,7 @@ def evaluate_model_b(split: str, rows=None):
     ranker    = joblib.load(ranker_path)
 
     # ---------------------------------------------------------------------------
-    # Distractor evaluation: for each row, rank all 4 options and check if the
-    # top-3 predicted distractors (non-correct options) are retrieved correctly
+    # Distractor evaluation
     # ---------------------------------------------------------------------------
     print("\n  Evaluating distractor ranker...")
 
@@ -367,12 +439,11 @@ def evaluate_model_b(split: str, rows=None):
     y_distractor_pred = []
     precision_at_3_hits = 0
 
-    sample = df.head(min(500, len(df)))  # sample for speed
+    sample = df.head(min(500, len(df)))
 
     for _, row in sample.iterrows():
         correct = str(row['answer']).strip().upper()
 
-        # Build features for all 4 options
         opt_feats = []
         for opt in OPTION_COLS:
             art_vec = tfidf_vec.transform([row['article']])
@@ -383,8 +454,6 @@ def evaluate_model_b(split: str, rows=None):
             opt_feats.append([cos, opt_len, opt_len / art_len])
 
         X_opts = np.array(opt_feats)
-
-        # Label: 0=correct answer (should NOT be a distractor), 1=distractor
         labels_true = [0 if o == correct else 1 for o in OPTION_COLS]
 
         try:
@@ -395,7 +464,6 @@ def evaluate_model_b(split: str, rows=None):
         y_distractor_true.extend(labels_true)
         y_distractor_pred.extend(labels_pred.tolist())
 
-        # Precision@3: top-3 predicted distractors should all be non-correct
         pred_distractor_idx = np.argsort(labels_pred)[-3:]
         true_distractors    = {i for i, l in enumerate(labels_true) if l == 1}
         hits = len(set(pred_distractor_idx) & true_distractors)
@@ -422,7 +490,6 @@ def evaluate_model_b(split: str, rows=None):
         print(f"    TN={cm[0,0]}  FP={cm[0,1]}")
         print(f"    FN={cm[1,0]}  TP={cm[1,1]}")
 
-    # Hint scorer R² (if available)
     if os.path.exists(hint_path):
         print(f"\n  Hint scorer found — R² would require sentence-level relevance labels")
         print(f"  (generated during model_b_train.py and stored as evaluation artefact)")
