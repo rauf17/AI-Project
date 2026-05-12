@@ -21,7 +21,6 @@ from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
 # ---------------------------------------------------------------------------
 # Paths — Kaggle layout
-# ---------------------------------------------------------------------------
 
 RAW_DIR       = './data/raw'
 PROCESSED_DIR = './data/processed'
