@@ -1,4 +1,4 @@
-# AI-Project 🤖
+# Race Dataset AI ML Classifier - AI PROJECT🤖
 
 This repository hosts `AI-Project`, a comprehensive initiative exploring fundamental concepts in Artificial Intelligence and Machine Learning through practical model development and data processing.
 
